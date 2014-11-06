@@ -22,72 +22,20 @@ import org.biojava.bio.structure.xtal.CrystalBuilder;
 import org.biojava.bio.structure.xtal.CrystalCell;
 import org.biojava.bio.structure.xtal.CrystalTransform;
 import org.biojava.bio.structure.xtal.SpaceGroup;
-import org.biojava3.structure.quaternary.utils.Edge;
-import org.biojava3.structure.quaternary.utils.SimpleGraph;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import edu.uci.ics.jung.graph.UndirectedSparseGraph;
 
-public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
+
+public class LatticeGraph {
 	private static final Logger logger = LoggerFactory.getLogger(LatticeGraph.class);
 
+	private UndirectedSparseGraph<AtomVertex,InterfaceEdge> graph;
 
-	public static class AtomVertex {
-		private String chainId;
-		private Atom position;
-		private int opId;
-		public AtomVertex(String chainId, Atom position, int opId) {
-			super();
-			this.chainId = chainId;
-			this.position = position;
-			this.opId = opId;
-		}
-		public String getName() {
-			return chainId+opId;
-		}
-		public String getChainId() {
-			return chainId;
-		}
-		public Atom getPosition() {
-			return position;
-		}
-		public int getOpId() {
-			return opId;
-		}
-		public String toString() {
-			return getName();
-		}
-		@Override
-		public int hashCode() {
-			final int prime = 31;
-			int result = 1;
-			result = prime * result + ((chainId == null) ? 0 : chainId.hashCode());
-			result = prime * result + opId;
-			return result;
-		}
-		@Override
-		public boolean equals(Object obj) {
-			if (this == obj)
-				return true;
-			if (obj == null)
-				return false;
-			if (getClass() != obj.getClass())
-				return false;
-			AtomVertex other = (AtomVertex) obj;
-			if (chainId == null) {
-				if (other.chainId != null)
-					return false;
-			} else if (!chainId.equals(other.chainId))
-				return false;
-			if (opId != other.opId)
-				return false;
-			return true;
-		}
-
-	}
-
-
+	
 	public LatticeGraph(Structure struc) {
+		graph = new UndirectedSparseGraph<AtomVertex, InterfaceEdge>();
 
 		// Get centroid for all chains in the asymmetric unit
 		Map<String,Map<Integer,AtomVertex>> vertices = new HashMap<String, Map<Integer,AtomVertex>>();
@@ -100,11 +48,12 @@ public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
 			vertices.putIfAbsent(chainId, new HashMap<Integer,AtomVertex>());
 			vertices.get(chainId).put(0, vert);
 
-			this.addVertex(vert);
+			graph.addVertex(vert);
 		}
 		logger.info("Found "+vertices.size()+" chains in asymmetric unit");
 
 		SpaceGroup space = struc.getCrystallographicInfo().getSpaceGroup();
+		Matrix4d[] spaceOps = struc.getCrystallographicInfo().getTransformationsOrthonormal();
 		
 		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
 		// get all interfaces
@@ -143,7 +92,7 @@ public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
 				a = new AtomVertex(chainA, newPos, idA);
 
 				vertices.get(chainA).put(idA, a);
-				addVertex(a);
+				graph.addVertex(a);
 			}
 			if(b == null) {
 				Matrix4d crystalOp = transforms.getSecond().getMatTransform();
@@ -155,11 +104,10 @@ public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
 				b = new AtomVertex(chainB, newPos, idB);
 
 				vertices.get(chainB).put(idB, b);
-				addVertex(b);
+				graph.addVertex(b);
 			}
 
-
-			this.addEdge(a, b);
+			graph.addEdge(new InterfaceEdge(),a, b);
 		}
 	}
 
@@ -177,7 +125,7 @@ public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
 
 	public String drawVertices() {
 		StringBuilder str = new StringBuilder();
-		for(AtomVertex vert : getVertices()) {
+		for(AtomVertex vert : graph.getVertices()) {
 			Atom pos = vert.getPosition();
 			//str.append(String.format("draw %s CIRCLE %f,%f,%f SCALE 1.0 DIAMETER 5.0; ", vert.getName(), pos.getX(),pos.getY(),pos.getZ() ));
 			str.append(String.format("isosurface ID %s CENTER {%f,%f,%f} SPHERE 5.0;\n",
@@ -189,9 +137,10 @@ public class LatticeGraph extends SimpleGraph<LatticeGraph.AtomVertex> {
 	
 	public String drawEdges() {
 		StringBuilder str = new StringBuilder();
-		for(Edge<AtomVertex> edge : getEdges()) {
-			AtomVertex a = edge.getVertex1();
-			AtomVertex b = edge.getVertex2();
+		for(InterfaceEdge edge : graph.getEdges()) {
+			edu.uci.ics.jung.graph.util.Pair<AtomVertex> edgePair = graph.getEndpoints(edge);
+			AtomVertex a = edgePair.getFirst();
+			AtomVertex b = edgePair.getSecond();
 			Atom posA = a.getPosition();
 			Atom posB = b.getPosition();
 			str.append(String.format("draw ID edge_%s_%s VECTOR {%f,%f,%f} {%f,%f,%f};\n",
