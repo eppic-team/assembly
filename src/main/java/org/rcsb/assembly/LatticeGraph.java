@@ -6,6 +6,7 @@ import java.util.Map;
 
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Point3d;
+import javax.vecmath.Point3i;
 
 import org.biojava.bio.structure.Atom;
 import org.biojava.bio.structure.AtomImpl;
@@ -33,29 +34,49 @@ public class LatticeGraph {
 
 	private UndirectedSparseGraph<AtomVertex,InterfaceEdge> graph;
 
-	
+
 	public LatticeGraph(Structure struc) {
 		graph = new UndirectedSparseGraph<AtomVertex, InterfaceEdge>();
 
-		// Get centroid for all chains in the asymmetric unit
+		// Begin SciFi comments
+		// SPACE OPS! Transform!
+		Matrix4d[] spaceOps = struc.getCrystallographicInfo().getTransformationsOrthonormal();
+
+		// GROUP OF SPACE OPS! Symmetry operations
+		SpaceGroup space = struc.getCrystallographicInfo().getSpaceGroup();
+
+		// CRYSTAL POWER CELL! Cell dimensions and angles
+		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
+
 		Map<String,Map<Integer,AtomVertex>> vertices = new HashMap<String, Map<Integer,AtomVertex>>();
+
+		// Generate vertices for unit cell
 		for(Chain c : struc.getChains()) {
+			// Calculate centroid position for this chain in the AU
 			String chainId = c.getChainID();
 			Atom[] ca = StructureTools.getAtomCAArray(c);
-			Atom centroid = Calc.getCentroid(ca);
+			Atom centroidAU = Calc.getCentroid(ca);
 
-			AtomVertex vert = new AtomVertex(chainId,centroid,0);
 			vertices.putIfAbsent(chainId, new HashMap<Integer,AtomVertex>());
-			vertices.get(chainId).put(0, vert);
 
-			graph.addVertex(vert);
+			for(int opId = 0; opId < spaceOps.length; opId++) {
+				// Apply operator to centroid
+				Atom centroid = (Atom)centroidAU.clone();
+				Calc.transform(centroid, spaceOps[opId]);
+
+				// Make sure it is inside the cell
+				toUnitCell(centroid,cell);
+
+				// Create new vertex & add to the graph
+				AtomVertex vert = new AtomVertex(chainId,centroid,opId);
+
+				vertices.get(chainId).put(0, vert);
+				graph.addVertex(vert);
+			}
+
 		}
 		logger.info("Found "+vertices.size()+" chains in asymmetric unit");
 
-		SpaceGroup space = struc.getCrystallographicInfo().getSpaceGroup();
-		Matrix4d[] spaceOps = struc.getCrystallographicInfo().getTransformationsOrthonormal();
-		
-		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
 		// get all interfaces
 		CrystalBuilder builder = new CrystalBuilder(struc);
 		StructureInterfaceList interfaces = builder.getUniqueInterfaces();
@@ -111,7 +132,6 @@ public class LatticeGraph {
 		}
 	}
 
-
 	private static Atom transformAtom(Matrix4d realOp, Atom pos) {
 		Point3d posPt = new Point3d(pos.getCoords());
 		realOp.transform(posPt); // The only meaningful line of this method
@@ -120,6 +140,15 @@ public class LatticeGraph {
 		Atom newPos = new AtomImpl();
 		newPos.setCoords(coords);
 		return newPos;
+	}
+	
+	private static void toUnitCell(Atom atom, CrystalCell cell) {
+		double[] coords = atom.getCoords();
+		Point3d pt = new Point3d(coords);
+		cell.transfToOriginCell(pt);
+		atom.setX(pt.getX());
+		atom.setY(pt.getY());
+		atom.setZ(pt.getZ());
 	}
 
 
@@ -134,7 +163,7 @@ public class LatticeGraph {
 		logger.info("JMOL:\n"+str.toString());
 		return str.toString();
 	}
-	
+
 	public String drawEdges() {
 		StringBuilder str = new StringBuilder();
 		for(InterfaceEdge edge : graph.getEdges()) {
@@ -174,7 +203,7 @@ public class LatticeGraph {
 			// cartoon
 			//jmol.evalString("hide null; select all;  spacefill off; wireframe off; backbone off; cartoon on;  select ligand; wireframe 0.16;spacefill 0.5; color cpk;  select *.FE; spacefill 0.7; color cpk ;  select *.CU; spacefill 0.7; color cpk ;  select *.ZN; spacefill 0.7; color cpk ;  select alls ON;");
 			jmol.evalString("select all; spacefill off; wireframe off; backbone off; cartoon on; select none;");
-			
+
 			jmol.evalString(graph.drawVertices());
 			jmol.evalString(graph.drawEdges());
 

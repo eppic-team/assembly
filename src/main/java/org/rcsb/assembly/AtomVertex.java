@@ -4,11 +4,12 @@ import org.biojava.bio.structure.Atom;
 
 public class AtomVertex {
 	// Primary Key:
-	private int opId;
+	private int opId; // operator to generate this position within the unit cell
 	private String chainId;
 	
 	// Metadata
 	private Atom position;
+	private int entity; //TODO
 	
 	public AtomVertex(String chainId, Atom position, int opId) {
 		super();
