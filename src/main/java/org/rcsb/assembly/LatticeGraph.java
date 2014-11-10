@@ -6,7 +6,6 @@ import java.util.Map;
 
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Point3d;
-import javax.vecmath.Point3i;
 
 import org.biojava.bio.structure.Atom;
 import org.biojava.bio.structure.AtomImpl;
@@ -26,17 +25,18 @@ import org.biojava.bio.structure.xtal.SpaceGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import edu.uci.ics.jung.graph.UndirectedSparseGraph;
+import edu.uci.ics.jung.graph.Graph;
+import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
 
 
 public class LatticeGraph {
 	private static final Logger logger = LoggerFactory.getLogger(LatticeGraph.class);
 
-	private UndirectedSparseGraph<AtomVertex,InterfaceEdge> graph;
+	private Graph<AtomVertex,InterfaceEdge> graph;
 
 
 	public LatticeGraph(Structure struc) {
-		graph = new UndirectedSparseGraph<AtomVertex, InterfaceEdge>();
+		graph = new UndirectedSparseMultigraph<AtomVertex, InterfaceEdge>();
 
 		// Begin SciFi comments
 		// SPACE OPS! Transform!
@@ -48,7 +48,9 @@ public class LatticeGraph {
 		// CRYSTAL POWER CELL! Cell dimensions and angles
 		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
 
+		// Maps chainId and unit cell operator id to a vertex
 		Map<String,Map<Integer,AtomVertex>> vertices = new HashMap<String, Map<Integer,AtomVertex>>();
+
 
 		// Generate vertices for unit cell
 		for(Chain c : struc.getChains()) {
@@ -68,70 +70,138 @@ public class LatticeGraph {
 				toUnitCell(centroid,cell);
 
 				// Create new vertex & add to the graph
-				AtomVertex vert = new AtomVertex(chainId,centroid,opId);
+				AtomVertex vert = new AtomVertex(chainId,opId);
+				vert.setPosition(centroid);
 
-				vertices.get(chainId).put(0, vert);
+				vertices.get(chainId).put(opId, vert);
 				graph.addVertex(vert);
 			}
 
 		}
-		logger.info("Found "+vertices.size()+" chains in asymmetric unit");
-
+		logger.info("Found "+graph.getVertexCount()+" chains in unit cell");
+		
+		
 		// get all interfaces
 		CrystalBuilder builder = new CrystalBuilder(struc);
 		StructureInterfaceList interfaces = builder.getUniqueInterfaces();
 		logger.info("Calculating ASA for "+interfaces.size()+" potential interfaces");
-		interfaces.calcAsas();
+		interfaces.calcAsas(StructureInterfaceList.DEFAULT_ASA_SPHERE_POINTS/3, //fewer for performance
+				Runtime.getRuntime().availableProcessors(),
+				StructureInterfaceList.DEFAULT_MIN_COFACTOR_SIZE);
 		interfaces.removeInterfacesBelowArea();
 		logger.info("Found "+interfaces.size()+" interfaces");
 
-		// For each interface, add edge between centroids
+		// For each interface, add edges for each asymm unit
 		for(StructureInterface face : interfaces) {
 			System.out.println(face);
 
 			Pair<CrystalTransform> transforms = face.getTransforms();
-			int idA = transforms.getFirst().getTransformId();
-			int idB = transforms.getSecond().getTransformId();
+			CrystalTransform transformA = transforms.getFirst();
+			CrystalTransform transformB = transforms.getSecond();
+//			int idA = transformA.getTransformId();
+//			int idB = transformB.getTransformId();
+			Matrix4d crystalTransformA = transformA.getMatTransform();
+			Matrix4d crystalTransformB = transformB.getMatTransform();
+			Matrix4d faceTransformA = cell.transfToOrthonormal(crystalTransformA);
+			Matrix4d faceTransformB = cell.transfToOrthonormal(crystalTransformB);
 
 			Pair<String> chainIds = face.getMoleculeIds();
 			String chainA = chainIds.getFirst();
 			String chainB = chainIds.getSecond();
 
-			//			vertices.putIfAbsent(chainA, new HashMap<Integer,AtomVertex>());
-			//			vertices.putIfAbsent(chainB, new HashMap<Integer,AtomVertex>());
-
-			AtomVertex a = vertices.get(chainA).get(idA);
-			AtomVertex b = vertices.get(chainB).get(idB);
-
-			if(a == null) {
-				Matrix4d crystalOp = transforms.getFirst().getMatTransform();
-				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
-
-				Atom pos = vertices.get(chainA).get(0).getPosition();
-				Atom newPos = transformAtom(realOp, pos);
-
-				a = new AtomVertex(chainA, newPos, idA);
-
-				vertices.get(chainA).put(idA, a);
-				graph.addVertex(a);
+			AtomVertex auA = vertices.get(chainA).get(0);
+			AtomVertex auB = vertices.get(chainB).get(0);
+			
+			
+			// Add edge for each asymmetric unit
+			for(int opId = 0; opId < spaceOps.length; opId++) {
+				// Calculate endpoints
+				// First transform each centroid according to the spaceOp (cached in the vertices)
+				Atom startPosA = vertices.get(chainA).get(opId).getPosition();
+				Atom startPosB = vertices.get(chainB).get(opId).getPosition();
+				// Then transform according to the interface
+				Atom endPosA = transformAtom(faceTransformA, startPosA);
+				Atom endPosB = transformAtom(faceTransformB, startPosB);
+				// Return to the Unit cell
+				Atom ucPosA = (Atom) endPosA.clone();
+				Atom ucPosB = (Atom) endPosB.clone();
+				toUnitCell(ucPosA, cell);
+				toUnitCell(ucPosB, cell);
+				
+				// Determine which AU the partners belong to
+				AtomVertex vertA = findVertex(ucPosA);
+				AtomVertex vertB = findVertex(ucPosB);
+				
+				//TODO Add edge
 			}
-			if(b == null) {
-				Matrix4d crystalOp = transforms.getSecond().getMatTransform();
-				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
-
-				Atom pos = vertices.get(chainB).get(0).getPosition();
-				Atom newPos = transformAtom(realOp, pos);
-
-				b = new AtomVertex(chainB, newPos, idB);
-
-				vertices.get(chainB).put(idB, b);
-				graph.addVertex(b);
-			}
-
-			graph.addEdge(new InterfaceEdge(),a, b);
+//			AtomVertex a = vertices.get(chainA).get(idA);
+//			AtomVertex b = vertices.get(chainB).get(idB);
+//
+//			if(a == null) {
+//				Matrix4d crystalOp = transforms.getFirst().getMatTransform();
+//				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
+//
+//				Atom pos = vertices.get(chainA).get(0).getPosition();
+//				Atom newPos = transformAtom(realOp, pos);
+//
+//				a = new AtomVertex(chainA, idA);
+//				a.setPosition(newPos);
+//
+//				vertices.get(chainA).put(idA, a);
+//				graph.addVertex(a);
+//			}
+//			if(b == null) {
+//				Matrix4d crystalOp = transforms.getSecond().getMatTransform();
+//				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
+//
+//				Atom pos = vertices.get(chainB).get(0).getPosition();
+//				Atom newPos = transformAtom(realOp, pos);
+//
+//				b = new AtomVertex(chainB, idB);
+//				b.setPosition(newPos);
+//
+//				vertices.get(chainB).put(idB, b);
+//				graph.addVertex(b);
+//			}
+//
+//			InterfaceEdge edge = new InterfaceEdge(face.getId());
+//			edge.addSegment(start, end);
+//			
+//			graph.addEdge(edge,a, b);
 		}
 	}
 
+	/**
+	 * Finds a Vertex that corresponds to the specified atom. 
+	 * 
+	 * Returns null if no vertex is found within a small margin of error
+	 * @param vertices
+	 * @param atom
+	 * @return
+	 */
+	private AtomVertex findVertex(Atom atom) {
+		final double tol = 1e-12;
+		
+		for(AtomVertex vert : graph.getVertices()) {
+			if(vert.getPosition() == null) {
+				continue;
+			}
+			double distSq = Calc.getDistanceFast(vert.getPosition(), atom);
+			if(distSq < tol) {
+				return vert;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Transforms an Atom according to a matrix.
+	 * 
+	 * @param realOp A 4D rotation matrix
+	 * @param pos The Atom to rotate (unmodified)
+	 * @return A new Atom with the transformed coordinates
+	 * @see Matrix4d#transform(Point3d)
+	 */
 	private static Atom transformAtom(Matrix4d realOp, Atom pos) {
 		Point3d posPt = new Point3d(pos.getCoords());
 		realOp.transform(posPt); // The only meaningful line of this method
@@ -142,6 +212,12 @@ public class LatticeGraph {
 		return newPos;
 	}
 	
+	/**
+	 * Modify an Atom so that it resides within the origin unit cell
+	 * @param atom The atom to be modified
+	 * @param cell Definition of the unit cell
+	 * @see CrystalCell#transfToOriginCell(javax.vecmath.Tuple3d)
+	 */
 	private static void toUnitCell(Atom atom, CrystalCell cell) {
 		double[] coords = atom.getCoords();
 		Point3d pt = new Point3d(coords);
