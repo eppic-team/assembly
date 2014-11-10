@@ -32,11 +32,50 @@ import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
 public class LatticeGraph {
 	private static final Logger logger = LoggerFactory.getLogger(LatticeGraph.class);
 
-	private Graph<ChainVertex,InterfaceEdge> graph;
+
+	protected static class ChainVertexKey {
+		public int opId;
+		public String chainId;
+		public ChainVertexKey(String chainId,int opId) {
+			this.opId = opId;
+			this.chainId = chainId;
+		}
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result
+					+ ((chainId == null) ? 0 : chainId.hashCode());
+			result = prime * result + opId;
+			return result;
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			ChainVertexKey other = (ChainVertexKey) obj;
+			if (chainId == null) {
+				if (other.chainId != null)
+					return false;
+			} else if (!chainId.equals(other.chainId))
+				return false;
+			if (opId != other.opId)
+				return false;
+			return true;
+		}
+		
+	}
+	
+	private Graph<AtomVertex,InterfaceEdge> graph;
+	private Map<ChainVertexKey, ChainVertex> chainNodes;
 
 
 	public LatticeGraph(Structure struc) {
-		graph = new UndirectedSparseMultigraph<ChainVertex, InterfaceEdge>();
+		graph = new UndirectedSparseMultigraph<AtomVertex, InterfaceEdge>();
 
 		// Begin SciFi comments
 		// SPACE OPS! Transform!
@@ -49,7 +88,7 @@ public class LatticeGraph {
 		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
 
 		// Maps chainId and unit cell operator id to a vertex
-		Map<String,Map<Integer,ChainVertex>> vertices = new HashMap<String, Map<Integer,ChainVertex>>();
+		chainNodes = new HashMap<ChainVertexKey,ChainVertex>();
 
 
 		// Generate vertices for unit cell
@@ -58,8 +97,6 @@ public class LatticeGraph {
 			String chainId = c.getChainID();
 			Atom[] ca = StructureTools.getAtomCAArray(c);
 			Atom centroidAU = Calc.getCentroid(ca);
-
-			vertices.putIfAbsent(chainId, new HashMap<Integer,ChainVertex>());
 
 			for(int opId = 0; opId < spaceOps.length; opId++) {
 				// Apply operator to centroid
@@ -73,7 +110,7 @@ public class LatticeGraph {
 				ChainVertex vert = new ChainVertex(chainId,opId);
 				vert.setPosition(centroid);
 
-				vertices.get(chainId).put(opId, vert);
+				chainNodes.put(new ChainVertexKey(chainId,opId), vert);
 				graph.addVertex(vert);
 			}
 
@@ -109,16 +146,16 @@ public class LatticeGraph {
 			String chainA = chainIds.getFirst();
 			String chainB = chainIds.getSecond();
 
-			ChainVertex auA = vertices.get(chainA).get(0);
-			ChainVertex auB = vertices.get(chainB).get(0);
+			ChainVertex auA = chainNodes.get(new ChainVertexKey(chainA,0));
+			ChainVertex auB = chainNodes.get(new ChainVertexKey(chainB,0));
 			
 			
 			// Add edge for each asymmetric unit
 			for(int opId = 0; opId < spaceOps.length; opId++) {
 				// Calculate endpoints
 				// First transform each centroid according to the spaceOp (cached in the vertices)
-				Atom startPosA = vertices.get(chainA).get(opId).getPosition();
-				Atom startPosB = vertices.get(chainB).get(opId).getPosition();
+				Atom startPosA = chainNodes.get(new ChainVertexKey(chainA,opId)).getPosition();
+				Atom startPosB = chainNodes.get(new ChainVertexKey(chainB,opId)).getPosition();
 				// Then transform according to the interface
 				Atom endPosA = transformAtom(faceTransformA, startPosA);
 				Atom endPosB = transformAtom(faceTransformB, startPosB);
@@ -182,7 +219,7 @@ public class LatticeGraph {
 	private ChainVertex findVertex(Atom atom) {
 		final double tol = 1e-12;
 		
-		for(ChainVertex vert : graph.getVertices()) {
+		for(ChainVertex vert : chainNodes.values()) {
 			if(vert.getPosition() == null) {
 				continue;
 			}
@@ -230,11 +267,16 @@ public class LatticeGraph {
 
 	public String drawVertices() {
 		StringBuilder str = new StringBuilder();
-		for(ChainVertex vert : graph.getVertices()) {
-			Atom pos = vert.getPosition();
-			//str.append(String.format("draw %s CIRCLE %f,%f,%f SCALE 1.0 DIAMETER 5.0; ", vert.getName(), pos.getX(),pos.getY(),pos.getZ() ));
-			str.append(String.format("isosurface ID %s CENTER {%f,%f,%f} SPHERE 5.0;\n",
-					vert.getName(), pos.getX(),pos.getY(),pos.getZ() ));
+		for(AtomVertex vertex : graph.getVertices()) {
+			if( vertex instanceof ChainVertex) {
+				ChainVertex vert = (ChainVertex) vertex;
+				Atom pos = vert.getPosition();
+				//str.append(String.format("draw %s CIRCLE %f,%f,%f SCALE 1.0 DIAMETER 5.0; ", vert.getName(), pos.getX(),pos.getY(),pos.getZ() ));
+				str.append(String.format("isosurface ID %s CENTER {%f,%f,%f} SPHERE 5.0;\n",
+						vert, pos.getX(),pos.getY(),pos.getZ() ));
+			} else {
+				throw new IllegalStateException("Unrecognized vertex class "+vertex.getClass().toString());
+			}
 		}
 		logger.info("JMOL:\n"+str.toString());
 		return str.toString();
@@ -243,13 +285,13 @@ public class LatticeGraph {
 	public String drawEdges() {
 		StringBuilder str = new StringBuilder();
 		for(InterfaceEdge edge : graph.getEdges()) {
-			edu.uci.ics.jung.graph.util.Pair<ChainVertex> edgePair = graph.getEndpoints(edge);
-			ChainVertex a = edgePair.getFirst();
-			ChainVertex b = edgePair.getSecond();
+			edu.uci.ics.jung.graph.util.Pair<AtomVertex> edgePair = graph.getEndpoints(edge);
+			AtomVertex a = edgePair.getFirst();
+			AtomVertex b = edgePair.getSecond();
 			Atom posA = a.getPosition();
 			Atom posB = b.getPosition();
 			str.append(String.format("draw ID edge_%s_%s VECTOR {%f,%f,%f} {%f,%f,%f};\n",
-					a.getName(),b.getName(),
+					a,b,
 					posA.getX(),posA.getY(),posA.getZ(),
 					posB.getX()-posA.getX(),posB.getY()-posA.getY(),posB.getZ()-posA.getZ() ));
 		}

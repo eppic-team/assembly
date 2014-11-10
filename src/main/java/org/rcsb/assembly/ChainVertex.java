@@ -8,7 +8,7 @@ package org.rcsb.assembly;
  * @author spencer
  *
  */
-public class ChainVertex extends AbstractLatticeVertex {
+public class ChainVertex extends AtomVertex {
 	// Primary Key:
 	private int opId; // operator to generate this position within the unit cell
 	private String chainId;
@@ -21,9 +21,7 @@ public class ChainVertex extends AbstractLatticeVertex {
 		this.chainId = chainId;
 		this.opId = opId;
 	}
-	public String getName() {
-		return chainId+opId;
-	}
+
 	public String getChainId() {
 		return chainId;
 	}
@@ -33,7 +31,7 @@ public class ChainVertex extends AbstractLatticeVertex {
 	
 	@Override
 	public String toString() {
-		return getName();
+		return chainId+opId;
 	}
 	/**
 	 * Hash key based on chain and op
@@ -67,5 +65,4 @@ public class ChainVertex extends AbstractLatticeVertex {
 			return false;
 		return true;
 	}
-
 }
