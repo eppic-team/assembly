@@ -1,21 +1,25 @@
 package org.rcsb.assembly;
 
-import org.biojava.bio.structure.Atom;
 
-public class AtomVertex {
+/**
+ * A vertex representing a single chain.
+ * Uniquely identified by cell (assumed to be [0,0,0]), asymmetric unit (given
+ * by an operator ID relative to the enclosing CrystalCell), and chain ID.
+ * @author spencer
+ *
+ */
+public class ChainVertex extends AbstractLatticeVertex {
 	// Primary Key:
 	private int opId; // operator to generate this position within the unit cell
 	private String chainId;
 	
 	// Metadata
-	private Atom position;
 	private int entity; //TODO
 	
-	public AtomVertex(String chainId, int opId) {
+	public ChainVertex(String chainId, int opId) {
 		super();
 		this.chainId = chainId;
 		this.opId = opId;
-		this.position = null;
 	}
 	public String getName() {
 		return chainId+opId;
@@ -25,12 +29,6 @@ public class AtomVertex {
 	}
 	public int getOpId() {
 		return opId;
-	}
-	public Atom getPosition() {
-		return position;
-	}
-	public void setPosition(Atom pos) {
-		this.position = pos;
 	}
 	
 	@Override
@@ -59,7 +57,7 @@ public class AtomVertex {
 			return false;
 		if (getClass() != obj.getClass())
 			return false;
-		AtomVertex other = (AtomVertex) obj;
+		ChainVertex other = (ChainVertex) obj;
 		if (chainId == null) {
 			if (other.chainId != null)
 				return false;

@@ -32,11 +32,11 @@ import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
 public class LatticeGraph {
 	private static final Logger logger = LoggerFactory.getLogger(LatticeGraph.class);
 
-	private Graph<AtomVertex,InterfaceEdge> graph;
+	private Graph<ChainVertex,InterfaceEdge> graph;
 
 
 	public LatticeGraph(Structure struc) {
-		graph = new UndirectedSparseMultigraph<AtomVertex, InterfaceEdge>();
+		graph = new UndirectedSparseMultigraph<ChainVertex, InterfaceEdge>();
 
 		// Begin SciFi comments
 		// SPACE OPS! Transform!
@@ -49,7 +49,7 @@ public class LatticeGraph {
 		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
 
 		// Maps chainId and unit cell operator id to a vertex
-		Map<String,Map<Integer,AtomVertex>> vertices = new HashMap<String, Map<Integer,AtomVertex>>();
+		Map<String,Map<Integer,ChainVertex>> vertices = new HashMap<String, Map<Integer,ChainVertex>>();
 
 
 		// Generate vertices for unit cell
@@ -59,7 +59,7 @@ public class LatticeGraph {
 			Atom[] ca = StructureTools.getAtomCAArray(c);
 			Atom centroidAU = Calc.getCentroid(ca);
 
-			vertices.putIfAbsent(chainId, new HashMap<Integer,AtomVertex>());
+			vertices.putIfAbsent(chainId, new HashMap<Integer,ChainVertex>());
 
 			for(int opId = 0; opId < spaceOps.length; opId++) {
 				// Apply operator to centroid
@@ -70,7 +70,7 @@ public class LatticeGraph {
 				toUnitCell(centroid,cell);
 
 				// Create new vertex & add to the graph
-				AtomVertex vert = new AtomVertex(chainId,opId);
+				ChainVertex vert = new ChainVertex(chainId,opId);
 				vert.setPosition(centroid);
 
 				vertices.get(chainId).put(opId, vert);
@@ -109,8 +109,8 @@ public class LatticeGraph {
 			String chainA = chainIds.getFirst();
 			String chainB = chainIds.getSecond();
 
-			AtomVertex auA = vertices.get(chainA).get(0);
-			AtomVertex auB = vertices.get(chainB).get(0);
+			ChainVertex auA = vertices.get(chainA).get(0);
+			ChainVertex auB = vertices.get(chainB).get(0);
 			
 			
 			// Add edge for each asymmetric unit
@@ -129,8 +129,8 @@ public class LatticeGraph {
 				toUnitCell(ucPosB, cell);
 				
 				// Determine which AU the partners belong to
-				AtomVertex vertA = findVertex(ucPosA);
-				AtomVertex vertB = findVertex(ucPosB);
+				ChainVertex vertA = findVertex(ucPosA);
+				ChainVertex vertB = findVertex(ucPosB);
 				
 				//TODO Add edge
 			}
@@ -179,10 +179,10 @@ public class LatticeGraph {
 	 * @param atom
 	 * @return
 	 */
-	private AtomVertex findVertex(Atom atom) {
+	private ChainVertex findVertex(Atom atom) {
 		final double tol = 1e-12;
 		
-		for(AtomVertex vert : graph.getVertices()) {
+		for(ChainVertex vert : graph.getVertices()) {
 			if(vert.getPosition() == null) {
 				continue;
 			}
@@ -230,7 +230,7 @@ public class LatticeGraph {
 
 	public String drawVertices() {
 		StringBuilder str = new StringBuilder();
-		for(AtomVertex vert : graph.getVertices()) {
+		for(ChainVertex vert : graph.getVertices()) {
 			Atom pos = vert.getPosition();
 			//str.append(String.format("draw %s CIRCLE %f,%f,%f SCALE 1.0 DIAMETER 5.0; ", vert.getName(), pos.getX(),pos.getY(),pos.getZ() ));
 			str.append(String.format("isosurface ID %s CENTER {%f,%f,%f} SPHERE 5.0;\n",
@@ -243,9 +243,9 @@ public class LatticeGraph {
 	public String drawEdges() {
 		StringBuilder str = new StringBuilder();
 		for(InterfaceEdge edge : graph.getEdges()) {
-			edu.uci.ics.jung.graph.util.Pair<AtomVertex> edgePair = graph.getEndpoints(edge);
-			AtomVertex a = edgePair.getFirst();
-			AtomVertex b = edgePair.getSecond();
+			edu.uci.ics.jung.graph.util.Pair<ChainVertex> edgePair = graph.getEndpoints(edge);
+			ChainVertex a = edgePair.getFirst();
+			ChainVertex b = edgePair.getSecond();
 			Atom posA = a.getPosition();
 			Atom posB = b.getPosition();
 			str.append(String.format("draw ID edge_%s_%s VECTOR {%f,%f,%f} {%f,%f,%f};\n",
