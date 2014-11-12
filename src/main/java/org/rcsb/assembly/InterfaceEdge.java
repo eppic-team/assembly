@@ -7,17 +7,30 @@ import javax.vecmath.Point3d;
 
 import edu.uci.ics.jung.graph.util.Pair;
 
-
+/**
+ * Edge between an InterfaceVertex and an AtomVertex.
+ * 
+ * By default, this will be positioned between its endpoints, but the layout
+ * can also be overridden by defining one or more segments.
+ * 
+ * @author spencer
+ *
+ */
 class InterfaceEdge {
 	// annotation data
 	private int interfaceId;
 	private List<Pair<Point3d>> segments;
+	private String color;
 	
 	public InterfaceEdge(int interfaceId) {
 		this.interfaceId = interfaceId;
 		segments = new ArrayList<Pair<Point3d>>(2);
+		color = null;
 		}
-	
+	/**
+	 * Adds a new segment for graph layout
+	 * @param segment
+	 */
 	public void addSegment(Pair<Point3d> segment) {
 		segments.add(segment);
 	}
@@ -29,6 +42,12 @@ class InterfaceEdge {
 	}
 	public int getInterfaceId() {
 		return interfaceId;
+	}
+	public String getColor() {
+		return color;
+	}
+	public void setColor(String color) {
+		this.color = color;
 	}
 	
 	@Override
