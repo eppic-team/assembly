@@ -1,7 +1,6 @@
 package org.rcsb.assembly;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -11,7 +10,6 @@ import javax.vecmath.Point3d;
 import javax.vecmath.Point3i;
 
 import org.biojava.bio.structure.Atom;
-import org.biojava.bio.structure.AtomImpl;
 import org.biojava.bio.structure.Calc;
 import org.biojava.bio.structure.Chain;
 import org.biojava.bio.structure.Structure;
@@ -28,7 +26,6 @@ import org.biojava.bio.structure.xtal.SpaceGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import cern.colt.Arrays;
 import edu.uci.ics.jung.graph.Graph;
 import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
 
@@ -134,12 +131,14 @@ public class LatticeGraph {
 			ChainVertex auA = chainNodes.get(new ChainVertexKey(chainA,0));
 			ChainVertex auB = chainNodes.get(new ChainVertexKey(chainB,0));
 			
-			Atom startPosA = auA.getPosition();
-			Atom startPosB = auB.getPosition();
+			Point3d startPosA = auA.getPosition();
+			Point3d startPosB = auB.getPosition();
 
 			// transform according to the interface
-			Atom endPosA = transformAtom(faceTransformA, startPosA);
-			Atom endPosB = transformAtom(faceTransformB, startPosB);
+			Point3d endPosA = new Point3d(startPosA);
+			Point3d endPosB = new Point3d(startPosB);
+			faceTransformA.transform(endPosA);
+			faceTransformB.transform(endPosB);
 
 			
 			// Add edge for each asymmetric unit
@@ -147,9 +146,11 @@ public class LatticeGraph {
 				//if(opId != 5) continue;
 				
 				// transform according to the spaceop
-				Atom posA = transformAtom(spaceOps[opId], endPosA);
-				Atom posB = transformAtom(spaceOps[opId], endPosB);
-				
+				Point3d posA = new Point3d(endPosA);
+				Point3d posB = new Point3d(endPosB);
+				spaceOps[opId].transform(posA);
+				spaceOps[opId].transform(posB);
+
 //				
 //				// Calculate endpoints
 //				// First transform each centroid according to the spaceOp (cached in the vertices)
@@ -159,13 +160,12 @@ public class LatticeGraph {
 //				Atom endPosA = transformAtom(faceTransformA, startPosA);
 //				Atom endPosB = transformAtom(faceTransformB, startPosB);
 				// Return to the Unit cell
-				Atom ucPosA = (Atom) posA.clone();
-				Atom ucPosB = (Atom) posB.clone();
-				toUnitCell(ucPosA, cell);
-				toUnitCell(ucPosB, cell);
+				Point3d ucPosA = new Point3d(posA);
+				Point3d ucPosB = new Point3d(posB);
+				cell.transfToOriginCell(ucPosA);
+				cell.transfToOriginCell(ucPosB);
 				logger.info(String.format("Interface %d AU %d: %s;\t%s\t->\t%s;\t%s%n",face.getId(),opId,
-						Arrays.toString(posA.getCoords()),Arrays.toString(posB.getCoords()),
-						Arrays.toString(ucPosA.getCoords()),Arrays.toString(ucPosB.getCoords()) ));
+						round(posA,2),round(posB,2),round(ucPosA,2),round(ucPosB,2) ));
 
 				
 				// Determine which AU the partners belong to
@@ -174,11 +174,11 @@ public class LatticeGraph {
 				
 				//TODO remove duplicates
 				// Only draw edges where cell(A) <= cell(B)
-				Point3i cellA = cell.getCellIndices(new Point3d(endPosA.getCoords()));
-				Point3i cellB = cell.getCellIndices(new Point3d(endPosB.getCoords()));
-				if( cellA.getX() > cellB.getX() || 
-						cellA.getY() > cellB.getY() || 
-						cellA.getZ() > cellB.getZ() )
+				Point3i cellA = cell.getCellIndices(endPosA);
+				Point3i cellB = cell.getCellIndices(endPosB);
+				if( cellA.x > cellB.x || 
+						cellA.y > cellB.y || 
+						cellA.z > cellB.z )
 				{
 					//continue;
 				}
@@ -195,10 +195,11 @@ public class LatticeGraph {
 				
 				// Create interface vertex at the midpoint
 				InterfaceVertex ivert = new InterfaceVertex(opId,face.getId());
-				Atom mid = Calc.add(posA,posB);
-				mid = Calc.scale(mid, 0.5);
-				Atom ucMid = (Atom)mid.clone();
-				toUnitCell(ucMid,cell);
+				Point3d mid = new Point3d();
+				mid.add(posA, posB);
+				mid.scale(0.5);
+				Point3d ucMid = new Point3d(mid);
+				cell.transfToOriginCell(ucMid);
 				ivert.setPosition(ucMid);
 				graph.addVertex(ivert);
 				
@@ -252,6 +253,14 @@ public class LatticeGraph {
 		}
 	}
 
+	private Point3d round(Point3d p, int places) {
+		double placeMult = Math.pow(10, places);
+		double x = Math.round(p.x*placeMult)/placeMult;
+		double y = Math.round(p.y*placeMult)/placeMult;
+		double z = Math.round(p.z*placeMult)/placeMult;
+		return new Point3d( x,y,z );
+	}
+
 	/**
 	 * Initialize the ChainVertex nodes of the graph
 	 * @param struc
@@ -264,15 +273,15 @@ public class LatticeGraph {
 			// Calculate centroid position for this chain in the AU
 			String chainId = c.getChainID();
 			Atom[] ca = StructureTools.getAtomCAArray(c);
-			Atom centroidAU = Calc.getCentroid(ca);
+			Point3d centroidAU = new Point3d(Calc.getCentroid(ca).getCoords());
 
 			for(int opId = 0; opId < spaceOps.length; opId++) {
 				// Apply operator to centroid
-				Atom centroid = (Atom)centroidAU.clone();
-				Calc.transform(centroid, spaceOps[opId]);
+				Point3d centroid = new Point3d(centroidAU);
+				spaceOps[opId].transform(centroid);
 
 				// Make sure it is inside the cell
-				toUnitCell(centroid,cell);
+				cell.transfToOriginCell(centroid);
 
 				// Create new vertex & add to the graph
 				ChainVertex vert = new ChainVertex(chainId,opId);
@@ -293,14 +302,14 @@ public class LatticeGraph {
 	 * @param atom
 	 * @return
 	 */
-	private ChainVertex findVertex(Atom atom) {
+	private ChainVertex findVertex(Point3d atom) {
 		final double tol = 1e-12;
 		
 		for(ChainVertex vert : chainNodes.values()) {
 			if(vert.getPosition() == null) {
 				continue;
 			}
-			double distSq = Calc.getDistanceFast(vert.getPosition(), atom);
+			double distSq = vert.getPosition().distanceSquared(atom);
 			if(distSq < tol) {
 				return vert;
 			}
@@ -308,59 +317,25 @@ public class LatticeGraph {
 		return null;
 	}
 
-	/**
-	 * Transforms an Atom according to a matrix.
-	 * 
-	 * @param realOp A 4D rotation matrix
-	 * @param pos The Atom to rotate (unmodified)
-	 * @return A new Atom with the transformed coordinates
-	 * @see Matrix4d#transform(Point3d)
-	 */
-	private static Atom transformAtom(Matrix4d realOp, Atom pos) {
-		Point3d posPt = new Point3d(pos.getCoords());
-		realOp.transform(posPt); // The only meaningful line of this method
-		double[] coords = new double[3];
-		posPt.get(coords);
-		Atom newPos = new AtomImpl();
-		newPos.setCoords(coords);
-		return newPos;
-	}
-	
-	/**
-	 * Modify an Atom so that it resides within the origin unit cell
-	 * @param atom The atom to be modified
-	 * @param cell Definition of the unit cell
-	 * @see CrystalCell#transfToOriginCell(javax.vecmath.Tuple3d)
-	 */
-	private static void toUnitCell(Atom atom, CrystalCell cell) {
-		double[] coords = atom.getCoords();
-		Point3d pt = new Point3d(coords);
-		cell.transfToOriginCell(pt);
-		atom.setX(pt.getX());
-		atom.setY(pt.getY());
-		atom.setZ(pt.getZ());
-	}
-
-
 	public String drawVertices() {
 		StringBuilder str = new StringBuilder();
 		for(AtomVertex vertex : graph.getVertices()) {
 			if( vertex instanceof ChainVertex) {
 				ChainVertex vert = (ChainVertex) vertex;
-				Atom pos = vert.getPosition();
+				Point3d pos = vert.getPosition();
 				str.append(String.format("isosurface ID chain%s CENTER {%f,%f,%f} SPHERE 5.0 COLOR blue;\n",
-						vert, pos.getX(),pos.getY(),pos.getZ() ));
+						vert, pos.x,pos.y,pos.z ));
 				str.append(String.format("set echo ID echoChain%s {%f,%f,%f}; color echo blue; echo \"  %s\";\n",
-						vert, pos.getX(),pos.getY(),pos.getZ(),vert));
+						vert, pos.x,pos.y,pos.z,vert));
 			} else if( vertex instanceof InterfaceVertex ) {
 				InterfaceVertex vert = (InterfaceVertex) vertex;
 				
-				Atom pos = vert.getPosition();
+				Point3d pos = vert.getPosition();
 				
 				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} DIAMETER 5.0;\n",vert,
-						pos.getX(),pos.getY(),pos.getZ() ));
+						pos.x,pos.y,pos.z ));
 				str.append(String.format("set echo ID echoInterface%s {%f,%f,%f}; color echo green;  echo %s;\n",
-						vert, pos.getX(),pos.getY(),pos.getZ(),vert.getInterfaceId()));
+						vert, pos.x,pos.y,pos.z,vert.getInterfaceId()));
 			} else {
 				throw new IllegalStateException("Unrecognized vertex class "+vertex.getClass().toString());
 			}
@@ -375,16 +350,16 @@ public class LatticeGraph {
 			edu.uci.ics.jung.graph.util.Pair<AtomVertex> edgePair = graph.getEndpoints(edge);
 			AtomVertex a = edgePair.getFirst();
 			AtomVertex b = edgePair.getSecond();
-			Atom posA = a.getPosition();
-			Atom posB = b.getPosition();
+			Point3d posA = a.getPosition();
+			Point3d posB = b.getPosition();
 			
 			double xjitter = (Math.random()*2-1.0) * 1.0;
 			double yjitter = (Math.random()*2-1.0) * 1.0;
 			double zjitter = (Math.random()*2-1.0) * 1.0;
 			str.append(String.format("draw ID edge_%s_%s VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
 					a,b,
-					posA.getX()+xjitter,posA.getY()+yjitter,posA.getZ()+zjitter,
-					posB.getX()-posA.getX(),posB.getY()-posA.getY(),posB.getZ()-posA.getZ(),
+					posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
+					posB.x-posA.x,posB.y-posA.y,posB.z-posA.z,
 					edge.getColor() == null ? "yellow" : edge.getColor() ));
 		}
 		logger.trace("JMOL:\n"+str.toString());
@@ -398,7 +373,7 @@ public class LatticeGraph {
 		name = "4MD1"; // rhodopsin, P63
 		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
 
-		String filename = "/home/spencer/pdb/"+name.toLowerCase()+".pdb";
+		String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 
 		try {
 			Structure struc = StructureTools.getStructure(filename);

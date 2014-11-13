@@ -1,5 +1,7 @@
 package org.rcsb.assembly;
 
+import javax.vecmath.Point3d;
+
 import org.biojava.bio.structure.Atom;
 
 /**
@@ -11,14 +13,14 @@ import org.biojava.bio.structure.Atom;
  *
  */
 public abstract class AtomVertex {
-	protected Atom position;
+	protected Point3d position;
 	public AtomVertex() {
 		this.position = null;
 	}
-	public Atom getPosition() {
+	public Point3d getPosition() {
 		return position;
 	}
-	public void setPosition(Atom pos) {
+	public void setPosition(Point3d pos) {
 		this.position = pos;
 	}
 }
