@@ -1,17 +1,23 @@
 package org.rcsb.assembly;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import javax.swing.JFrame;
 import javax.vecmath.Matrix4d;
 import javax.vecmath.Point3d;
 import javax.vecmath.Point3i;
+import javax.vecmath.Vector3d;
 
 import org.biojava.bio.structure.Atom;
 import org.biojava.bio.structure.Calc;
 import org.biojava.bio.structure.Chain;
+import org.biojava.bio.structure.PDBCrystallographicInfo;
 import org.biojava.bio.structure.Structure;
 import org.biojava.bio.structure.StructureException;
 import org.biojava.bio.structure.StructureTools;
@@ -68,9 +74,9 @@ public class LatticeGraph {
 				return false;
 			return true;
 		}
-		
+
 	}
-	
+
 	private Graph<AtomVertex,InterfaceEdge> graph;
 	// Maps chainId and unit cell operator id to a vertex
 	private Map<ChainVertexKey, ChainVertex> chainNodes;
@@ -80,24 +86,27 @@ public class LatticeGraph {
 		graph = new UndirectedSparseMultigraph<AtomVertex, InterfaceEdge>();
 		chainNodes = new HashMap<ChainVertexKey,ChainVertex>();
 
-		
+		PDBCrystallographicInfo crystalInfo = struc.getCrystallographicInfo();
+		if(crystalInfo == null) {
+			logger.error("No crystalographic info set for this structure.");
+		}
 		// Begin SciFi comments
 		// SPACE OPS! Transform!
-		Matrix4d[] spaceOps = struc.getCrystallographicInfo().getTransformationsOrthonormal();
+		Matrix4d[] spaceOps = crystalInfo.getTransformationsOrthonormal();
 
 		// GROUP OF SPACE OPS! Symmetry operations
-		SpaceGroup spaceGroup = struc.getCrystallographicInfo().getSpaceGroup();
+		SpaceGroup spaceGroup = crystalInfo.getSpaceGroup();
 
 		// CRYSTAL POWER CELL! Cell dimensions and angles
-		CrystalCell cell = struc.getCrystallographicInfo().getCrystalCell();
-		
-		
+		CrystalCell cell = crystalInfo.getCrystalCell();
+
+
 
 		// Generate vertices for unit cell
 		initChainVertices(struc, spaceOps, cell);
 		logger.info("Found "+graph.getVertexCount()+" chains in unit cell");
-		
-		
+
+
 		// get all interfaces
 		CrystalBuilder builder = new CrystalBuilder(struc);
 		StructureInterfaceList interfaces = builder.getUniqueInterfaces();
@@ -108,10 +117,10 @@ public class LatticeGraph {
 		interfaces.removeInterfacesBelowArea();
 		logger.info("Found "+interfaces.size()+" interfaces");
 
-		
+
 		// For each interface, add edges for each asymm unit
 		for(StructureInterface face : interfaces) {
-			if(face.getId() != 2) continue;
+			//if(face.getId() != 2) continue;
 			System.out.println(face);
 
 			Pair<CrystalTransform> transforms = face.getTransforms();
@@ -130,7 +139,7 @@ public class LatticeGraph {
 
 			ChainVertex auA = chainNodes.get(new ChainVertexKey(chainA,0));
 			ChainVertex auB = chainNodes.get(new ChainVertexKey(chainB,0));
-			
+
 			Point3d startPosA = auA.getPosition();
 			Point3d startPosB = auB.getPosition();
 
@@ -140,18 +149,18 @@ public class LatticeGraph {
 			faceTransformA.transform(endPosA);
 			faceTransformB.transform(endPosB);
 
-			
+
 			// Add edge for each asymmetric unit
 			for(int opId = 0; opId < spaceOps.length; opId++) {
-				//if(opId != 5) continue;
-				
+				//if(opId != 0) continue;
+
 				// transform according to the spaceop
 				Point3d posA = new Point3d(endPosA);
 				Point3d posB = new Point3d(endPosB);
 				spaceOps[opId].transform(posA);
 				spaceOps[opId].transform(posB);
 
-//				
+//
 //				// Calculate endpoints
 //				// First transform each centroid according to the spaceOp (cached in the vertices)
 //				Atom startPosA = chainNodes.get(new ChainVertexKey(chainA,opId)).getPosition();
@@ -167,17 +176,17 @@ public class LatticeGraph {
 				logger.info(String.format("Interface %d AU %d: %s;\t%s\t->\t%s;\t%s%n",face.getId(),opId,
 						round(posA,2),round(posB,2),round(ucPosA,2),round(ucPosB,2) ));
 
-				
+
 				// Determine which AU the partners belong to
 				ChainVertex vertA = findVertex(ucPosA);
 				ChainVertex vertB = findVertex(ucPosB);
-				
+
 				//TODO remove duplicates
 				// Only draw edges where cell(A) <= cell(B)
 				Point3i cellA = cell.getCellIndices(endPosA);
 				Point3i cellB = cell.getCellIndices(endPosB);
-				if( cellA.x > cellB.x || 
-						cellA.y > cellB.y || 
+				if( cellA.x > cellB.x ||
+						cellA.y > cellB.y ||
 						cellA.z > cellB.z )
 				{
 					//continue;
@@ -192,7 +201,7 @@ public class LatticeGraph {
 					//continue;
 				}
 
-				
+
 				// Create interface vertex at the midpoint
 				InterfaceVertex ivert = new InterfaceVertex(opId,face.getId());
 				Point3d mid = new Point3d();
@@ -202,20 +211,22 @@ public class LatticeGraph {
 				cell.transfToOriginCell(ucMid);
 				ivert.setPosition(ucMid);
 				graph.addVertex(ivert);
-				
+
 				InterfaceEdge edgeA = new InterfaceEdge(face.getId());
 				InterfaceEdge edgeB = new InterfaceEdge(face.getId());
 				edgeA.setColor("green");
 				edgeB.setColor("blue");
-				
-				//TODO Set segments for wrapped edges
-				
-				
+
+				//Set segments for wrapped edges
+				wrapEdge(edgeA, posA, mid, ucPosA, ucMid, cell);
+				wrapEdge(edgeB, mid, posB, ucMid, ucPosB, cell);
+
+
 				graph.addEdge(edgeA, vertA, ivert);
 				graph.addEdge(edgeB, vertB, ivert);
 			}
 			//break;
-			
+
 //			AtomVertex a = vertices.get(chainA).get(idA);
 //			AtomVertex b = vertices.get(chainB).get(idB);
 //
@@ -248,7 +259,7 @@ public class LatticeGraph {
 //
 //			InterfaceEdge edge = new InterfaceEdge(face.getId());
 //			edge.addSegment(start, end);
-//			
+//
 //			graph.addEdge(edge,a, b);
 		}
 	}
@@ -259,6 +270,144 @@ public class LatticeGraph {
 		double y = Math.round(p.y*placeMult)/placeMult;
 		double z = Math.round(p.z*placeMult)/placeMult;
 		return new Point3d( x,y,z );
+	}
+
+	/**
+	 *
+	 * @param edge The edge to add segments to
+	 * @param posA start position, unwrapped
+	 * @param posB end position, unwrapped
+	 * @param ucPosA start position, wrapped to unit cell
+	 * @param ucPosB end position, wrapped to unit cell
+	 * @param cell Unit cell parameters
+	 */
+	private void wrapEdge(InterfaceEdge edge, Point3d posA, Point3d posB,
+			Point3d ucPosA, Point3d ucPosB, CrystalCell cell) {
+		Point3i cellA = cell.getCellIndices(posA);
+		Point3i cellB = cell.getCellIndices(posB);
+
+		// no wrapping within cell
+		if( cellA.equals(cellB)) {
+			edge.addSegment(ucPosA, ucPosB);
+			return;
+		}
+
+		int[] indicesA = new int[3];
+		int[] indicesB = new int[3];
+		cellA.get(indicesA);
+		cellB.get(indicesB);
+
+		// For each side, identify cell boundaries which could be crossed
+		List<Point3d> intersectionsA = new ArrayList<Point3d>(3);
+		List<Point3d> intersectionsB = new ArrayList<Point3d>(3);
+
+		for(int coord=0;coord<3;coord++) {
+			// if they differ in this coordinate
+			if( indicesA[coord] != indicesB[coord] ) {
+				// Normal runs perpendicular to the other two coords
+				// Calculate cross product of two other crystal axes
+				double[] axis1Cryst = new double[3];
+				double[] axis2Cryst = new double[3];
+				axis1Cryst[(coord+1)%3] = 1.0;
+				axis2Cryst[(coord+2)%3] = 1.0;
+				Vector3d axis1 = new Vector3d(axis1Cryst);
+				Vector3d axis2 = new Vector3d(axis2Cryst);
+				cell.transfToOrthonormal(axis1);
+				cell.transfToOrthonormal(axis2);
+				Vector3d normal = new Vector3d();
+				normal.cross(axis1,axis2);
+
+				// Determine a point on the plane
+				// For the free coordinates, pick some relatively close to the cells
+				int[] pointACryst = Arrays.copyOf(indicesA, 3); // in crystal coords
+				int[] pointBCryst = Arrays.copyOf(indicesB, 3);
+				if( indicesA[coord] < indicesB[coord] ) {
+					// A is left of B
+					pointACryst[coord] = indicesA[coord]+1;
+					pointBCryst[coord] = indicesB[coord];
+				} else {
+					pointACryst[coord] = indicesA[coord];
+					pointBCryst[coord] = indicesB[coord]+1;
+				}
+				Point3d pointA = new Point3d(pointACryst[0],pointACryst[1],pointACryst[2]);
+				Point3d pointB = new Point3d(pointBCryst[0],pointBCryst[1],pointBCryst[2]);
+				cell.transfToOrthonormal(pointA);
+				cell.transfToOrthonormal(pointB);
+
+				// Determine intersection
+				Point3d intersectionA = planeIntersection(posA, posB, pointA, normal);
+				Point3d intersectionB = planeIntersection(posA, posB, pointB, normal);
+
+				// Only well defined if A->B is not parallel to the normal
+				if( intersectionA != null && intersectionB != null) {
+					intersectionsA.add(intersectionA);
+					intersectionsB.add(intersectionB);
+				}
+			}
+		}
+
+		// Draw a segment to the nearest intersection for each point
+		Point3d intersectionA = nearestNeighbor(intersectionsA, posA);
+		Point3d intersectionB = nearestNeighbor(intersectionsB, posB);
+
+		// convert to unit cell
+		// intersections are on the edge of the origin cell, so need to reference posA & posB
+		cell.transfToOriginCell(new Point3d[] {intersectionA}, posA);
+		cell.transfToOriginCell(new Point3d[] {intersectionB}, posB);
+
+		edge.addSegment(ucPosA, intersectionA);
+		edge.addSegment(intersectionB, ucPosB);
+	}
+
+	private Point3d nearestNeighbor(List<Point3d> points, Point3d query) {
+		if(points.isEmpty()) {
+			throw new IllegalArgumentException("No search points provided");
+		}
+		Iterator<Point3d> it = points.iterator();
+		Point3d nearest = it.next();
+		double minDist = query.distanceSquared(nearest);
+		while( it.hasNext() ) {
+			Point3d pt = it.next();
+			double dist = query.distanceSquared(pt);
+			if(dist < minDist) {
+				minDist = dist;
+				nearest = pt;
+			}
+		}
+		return nearest;
+	}
+
+	/**
+	 * Calculate the intersection of a line (given by two points) with a plane
+	 * (given by a point and a normal vector).
+	 * @param segA
+	 * @param segB
+	 * @param origin
+	 * @param normal
+	 */
+	private Point3d planeIntersection(Point3d segA, Point3d segB, Point3d origin, Vector3d normal) {
+		double tol = 1e-6; //tolerance for equality
+
+		Vector3d line = new Vector3d(); // vector B-A
+		line.sub(segB, segA);
+
+		// Check if parallel
+		if(Math.abs(line.dot(normal)) < tol) {
+			return null; // no intersection
+		}
+
+		// intersect at distance d along line, where
+		// d = dot(normal, origin - A)/dot(normal, B - A)
+		Vector3d planeToLine = new Vector3d();
+		planeToLine.sub(origin,segA);
+
+		double d = normal.dot(planeToLine) / normal.dot(line);
+
+		// Calculate final intersection point
+		Point3d intersection = new Point3d(line);
+		intersection.scaleAdd(d,segA);
+
+		return intersection;
 	}
 
 	/**
@@ -295,8 +444,8 @@ public class LatticeGraph {
 	}
 
 	/**
-	 * Finds a Vertex that corresponds to the specified atom. 
-	 * 
+	 * Finds a Vertex that corresponds to the specified atom.
+	 *
 	 * Returns null if no vertex is found within a small margin of error
 	 * @param vertices
 	 * @param atom
@@ -304,7 +453,7 @@ public class LatticeGraph {
 	 */
 	private ChainVertex findVertex(Point3d atom) {
 		final double tol = 1e-12;
-		
+
 		for(ChainVertex vert : chainNodes.values()) {
 			if(vert.getPosition() == null) {
 				continue;
@@ -316,6 +465,7 @@ public class LatticeGraph {
 		}
 		return null;
 	}
+
 
 	public String drawVertices() {
 		StringBuilder str = new StringBuilder();
@@ -329,9 +479,9 @@ public class LatticeGraph {
 						vert, pos.x,pos.y,pos.z,vert));
 			} else if( vertex instanceof InterfaceVertex ) {
 				InterfaceVertex vert = (InterfaceVertex) vertex;
-				
+
 				Point3d pos = vert.getPosition();
-				
+
 				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} DIAMETER 5.0;\n",vert,
 						pos.x,pos.y,pos.z ));
 				str.append(String.format("set echo ID echoInterface%s {%f,%f,%f}; color echo green;  echo %s;\n",
@@ -350,17 +500,30 @@ public class LatticeGraph {
 			edu.uci.ics.jung.graph.util.Pair<AtomVertex> edgePair = graph.getEndpoints(edge);
 			AtomVertex a = edgePair.getFirst();
 			AtomVertex b = edgePair.getSecond();
-			Point3d posA = a.getPosition();
-			Point3d posB = b.getPosition();
-			
-			double xjitter = (Math.random()*2-1.0) * 1.0;
-			double yjitter = (Math.random()*2-1.0) * 1.0;
-			double zjitter = (Math.random()*2-1.0) * 1.0;
-			str.append(String.format("draw ID edge_%s_%s VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
-					a,b,
-					posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
-					posB.x-posA.x,posB.y-posA.y,posB.z-posA.z,
-					edge.getColor() == null ? "yellow" : edge.getColor() ));
+
+			List<edu.uci.ics.jung.graph.util.Pair<Point3d>> segments = edge.getSegments();
+			if( segments == null || segments.isEmpty()) {
+				// if segments weren't specified, use the surrounding nodes
+				segments = new ArrayList<edu.uci.ics.jung.graph.util.Pair<Point3d>>();
+				segments.add(new edu.uci.ics.jung.graph.util.Pair<Point3d>(a.getPosition(),b.getPosition()));
+			}
+
+			int segNum = 0;
+			for( edu.uci.ics.jung.graph.util.Pair<Point3d> segment : segments) {
+				Point3d posA = segment.getFirst();
+				Point3d posB = segment.getSecond();
+
+				double xjitter = (Math.random()*2-1.0) * 1.0;
+				double yjitter = (Math.random()*2-1.0) * 1.0;
+				double zjitter = (Math.random()*2-1.0) * 1.0;
+				str.append(String.format("draw ID edge_%s_%s%s VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
+						a,b,'a'+segNum,
+						posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
+						posB.x-posA.x,posB.y-posA.y,posB.z-posA.z,
+						edge.getColor() == null ? "yellow" : edge.getColor() ));
+				segNum++;
+			}
+
 		}
 		logger.trace("JMOL:\n"+str.toString());
 		return str.toString();

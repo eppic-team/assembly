@@ -11,7 +11,7 @@ public class InterfaceVertex extends AtomVertex {
 
 	@Override
 	public String toString() {
-		return String.format("%d_%d",opId,interfaceId);
+		return String.format("i%dx%d",opId,interfaceId);
 	}
 
 	public int getOpId() {

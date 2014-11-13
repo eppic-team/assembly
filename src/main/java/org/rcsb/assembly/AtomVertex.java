@@ -2,8 +2,6 @@ package org.rcsb.assembly;
 
 import javax.vecmath.Point3d;
 
-import org.biojava.bio.structure.Atom;
-
 /**
  * Base class for various vertex implementations, to work around
  * the lack of a KPartiteGraph implementation in JUNG2
