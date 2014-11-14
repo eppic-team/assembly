@@ -28,7 +28,6 @@ import org.biojava.bio.structure.gui.BiojavaJmol;
 import org.biojava.bio.structure.xtal.CrystalBuilder;
 import org.biojava.bio.structure.xtal.CrystalCell;
 import org.biojava.bio.structure.xtal.CrystalTransform;
-import org.biojava.bio.structure.xtal.SpaceGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -95,7 +94,7 @@ public class LatticeGraph {
 		Matrix4d[] spaceOps = crystalInfo.getTransformationsOrthonormal();
 
 		// GROUP OF SPACE OPS! Symmetry operations
-		SpaceGroup spaceGroup = crystalInfo.getSpaceGroup();
+		//SpaceGroup spaceGroup = crystalInfo.getSpaceGroup();
 
 		// CRYSTAL POWER CELL! Cell dimensions and angles
 		CrystalCell cell = crystalInfo.getCrystalCell();
@@ -126,8 +125,6 @@ public class LatticeGraph {
 			Pair<CrystalTransform> transforms = face.getTransforms();
 			CrystalTransform transformA = transforms.getFirst();
 			CrystalTransform transformB = transforms.getSecond();
-//			int idA = transformA.getTransformId();
-//			int idB = transformB.getTransformId();
 			Matrix4d crystalTransformA = transformA.getMatTransform();
 			Matrix4d crystalTransformB = transformB.getMatTransform();
 			Matrix4d faceTransformA = cell.transfToOrthonormal(crystalTransformA);
@@ -160,14 +157,6 @@ public class LatticeGraph {
 				spaceOps[opId].transform(posA);
 				spaceOps[opId].transform(posB);
 
-//
-//				// Calculate endpoints
-//				// First transform each centroid according to the spaceOp (cached in the vertices)
-//				Atom startPosA = chainNodes.get(new ChainVertexKey(chainA,opId)).getPosition();
-//				Atom startPosB = chainNodes.get(new ChainVertexKey(chainB,opId)).getPosition();
-//				// Then transform according to the interface
-//				Atom endPosA = transformAtom(faceTransformA, startPosA);
-//				Atom endPosB = transformAtom(faceTransformB, startPosB);
 				// Return to the Unit cell
 				Point3d ucPosA = new Point3d(posA);
 				Point3d ucPosB = new Point3d(posB);
@@ -225,42 +214,6 @@ public class LatticeGraph {
 				graph.addEdge(edgeA, vertA, ivert);
 				graph.addEdge(edgeB, vertB, ivert);
 			}
-			//break;
-
-//			AtomVertex a = vertices.get(chainA).get(idA);
-//			AtomVertex b = vertices.get(chainB).get(idB);
-//
-//			if(a == null) {
-//				Matrix4d crystalOp = transforms.getFirst().getMatTransform();
-//				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
-//
-//				Atom pos = vertices.get(chainA).get(0).getPosition();
-//				Atom newPos = transformAtom(realOp, pos);
-//
-//				a = new AtomVertex(chainA, idA);
-//				a.setPosition(newPos);
-//
-//				vertices.get(chainA).put(idA, a);
-//				graph.addVertex(a);
-//			}
-//			if(b == null) {
-//				Matrix4d crystalOp = transforms.getSecond().getMatTransform();
-//				Matrix4d realOp = cell.transfToOrthonormal(crystalOp);
-//
-//				Atom pos = vertices.get(chainB).get(0).getPosition();
-//				Atom newPos = transformAtom(realOp, pos);
-//
-//				b = new AtomVertex(chainB, idB);
-//				b.setPosition(newPos);
-//
-//				vertices.get(chainB).put(idB, b);
-//				graph.addVertex(b);
-//			}
-//
-//			InterfaceEdge edge = new InterfaceEdge(face.getId());
-//			edge.addSegment(start, end);
-//
-//			graph.addEdge(edge,a, b);
 		}
 	}
 
@@ -513,9 +466,11 @@ public class LatticeGraph {
 				Point3d posA = segment.getFirst();
 				Point3d posB = segment.getSecond();
 
-				double xjitter = (Math.random()*2-1.0) * 1.0;
-				double yjitter = (Math.random()*2-1.0) * 1.0;
-				double zjitter = (Math.random()*2-1.0) * 1.0;
+				final double jitter = 1.0;//amount of jitter to add to edge positions
+				double xjitter = (Math.random()*2-1.0) * jitter;
+				double yjitter = (Math.random()*2-1.0) * jitter;
+				double zjitter = (Math.random()*2-1.0) * jitter;
+
 				str.append(String.format("draw ID edge_%s_%s%s VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
 						a,b,'a'+segNum,
 						posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
@@ -533,9 +488,9 @@ public class LatticeGraph {
 	public static void main(String[] args) {
 		String name;
 		name = "1a99"; // See eppic-science #14
-		name = "4MD1"; // rhodopsin, P63
-		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
-
+		//name = "4MD1"; // rhodopsin, P63
+		//name = "1C8R"; // rhodopsin, P63, two trimer interfaces
+		name = "1a6d"; //octohedral
 		String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 
 		try {
