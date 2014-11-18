@@ -119,7 +119,7 @@ public class LatticeGraph {
 
 		// For each interface, add edges for each asymm unit
 		for(StructureInterface face : interfaces) {
-			//if(face.getId() != 2) continue;
+			//if(face.getId() != 4) continue;
 			System.out.println(face);
 
 			Pair<CrystalTransform> transforms = face.getTransforms();
@@ -137,8 +137,8 @@ public class LatticeGraph {
 			ChainVertex auA = chainNodes.get(new ChainVertexKey(chainA,0));
 			ChainVertex auB = chainNodes.get(new ChainVertexKey(chainB,0));
 
-			Point3d startPosA = auA.getPosition();
-			Point3d startPosB = auB.getPosition();
+			Point3d startPosA = auA.getAUPosition();
+			Point3d startPosB = auB.getAUPosition();
 
 			// transform according to the interface
 			Point3d endPosA = new Point3d(startPosA);
@@ -382,12 +382,15 @@ public class LatticeGraph {
 				Point3d centroid = new Point3d(centroidAU);
 				spaceOps[opId].transform(centroid);
 
+//				if(!cell.getCellIndices(centroid).equals(new Point3i(0,0,0)))
+//					logger.info("moving chain "+chainId+" op "+opId);
 				// Make sure it is inside the cell
 				cell.transfToOriginCell(centroid);
 
 				// Create new vertex & add to the graph
 				ChainVertex vert = new ChainVertex(chainId,opId);
 				vert.setPosition(centroid);
+				vert.setAUPosition(centroidAU);
 
 				chainNodes.put(new ChainVertexKey(chainId,opId), vert);
 				graph.addVertex(vert);
@@ -489,8 +492,13 @@ public class LatticeGraph {
 		String name;
 		name = "1a99"; // See eppic-science #14
 		//name = "4MD1"; // rhodopsin, P63
-		//name = "1C8R"; // rhodopsin, P63, two trimer interfaces
-		name = "1a6d"; //octohedral
+		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
+		//name = "1a6d"; //octohedral
+		name = "3hbx"; // D3
+		name = "1pmm"; // P1 hexamer
+		name = "1pmo"; // different space group
+		name = "3piu"; // dimer
+		name = "1faa"; //monomer
 		String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 
 		try {

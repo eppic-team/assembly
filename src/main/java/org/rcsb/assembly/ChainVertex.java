@@ -1,5 +1,7 @@
 package org.rcsb.assembly;
 
+import javax.vecmath.Point3d;
+
 
 /**
  * A vertex representing a single chain.
@@ -15,11 +17,13 @@ public class ChainVertex extends AtomVertex {
 	
 	// Metadata
 	private int entity; //TODO
+	private Point3d auPosition;
 	
 	public ChainVertex(String chainId, int opId) {
 		super();
 		this.chainId = chainId;
 		this.opId = opId;
+		this.auPosition = null;
 	}
 
 	public String getChainId() {
@@ -64,5 +68,13 @@ public class ChainVertex extends AtomVertex {
 		if (opId != other.opId)
 			return false;
 		return true;
+	}
+
+	public void setAUPosition(Point3d centroidAU) {
+		this.auPosition = centroidAU;
+	}
+	
+	public Point3d getAUPosition() {
+		return this.auPosition;
 	}
 }
