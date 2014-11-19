@@ -1,5 +1,7 @@
 package org.rcsb.assembly;
 
+import java.awt.Color;
+
 import javax.vecmath.Point3d;
 
 /**
@@ -12,7 +14,7 @@ import javax.vecmath.Point3d;
  */
 public abstract class AtomVertex {
 	protected Point3d position;
-	protected String color;//optional
+	protected Color color;//optional
 
 	public AtomVertex() {
 		this.position = null;
@@ -24,10 +26,10 @@ public abstract class AtomVertex {
 	public void setPosition(Point3d pos) {
 		this.position = pos;
 	}
-	public String getColor() {
+	public Color getColor() {
 		return color;
 	}
-	public void setColor(String color) {
+	public void setColor(Color color) {
 		this.color = color;
 	}
 }

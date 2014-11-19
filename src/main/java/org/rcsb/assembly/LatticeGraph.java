@@ -1,5 +1,12 @@
 package org.rcsb.assembly;
 
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Paint;
+import java.awt.Shape;
+import java.awt.geom.Ellipse2D;
+import java.awt.geom.Rectangle2D;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -14,6 +21,7 @@ import javax.vecmath.Point3d;
 import javax.vecmath.Point3i;
 import javax.vecmath.Vector3d;
 
+import org.apache.commons.collections15.Transformer;
 import org.biojava.bio.structure.Atom;
 import org.biojava.bio.structure.Calc;
 import org.biojava.bio.structure.Chain;
@@ -21,18 +29,27 @@ import org.biojava.bio.structure.PDBCrystallographicInfo;
 import org.biojava.bio.structure.Structure;
 import org.biojava.bio.structure.StructureException;
 import org.biojava.bio.structure.StructureTools;
+import org.biojava.bio.structure.align.util.AtomCache;
 import org.biojava.bio.structure.contact.Pair;
 import org.biojava.bio.structure.contact.StructureInterface;
 import org.biojava.bio.structure.contact.StructureInterfaceList;
 import org.biojava.bio.structure.gui.BiojavaJmol;
+import org.biojava.bio.structure.io.MMCIFFileReader;
+import org.biojava.bio.structure.io.PDBFileReader;
 import org.biojava.bio.structure.xtal.CrystalBuilder;
 import org.biojava.bio.structure.xtal.CrystalCell;
 import org.biojava.bio.structure.xtal.CrystalTransform;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import edu.uci.ics.jung.algorithms.layout.SpringLayout;
+import edu.uci.ics.jung.algorithms.layout.SpringLayout2;
 import edu.uci.ics.jung.graph.Graph;
 import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
+import edu.uci.ics.jung.visualization.VisualizationViewer;
+import edu.uci.ics.jung.visualization.control.DefaultModalGraphMouse;
+import edu.uci.ics.jung.visualization.control.ModalGraphMouse;
+import edu.uci.ics.jung.visualization.decorators.ToStringLabeller;
 
 
 public class LatticeGraph {
@@ -193,13 +210,13 @@ public class LatticeGraph {
 
 				// Set properties
 				graph.addVertex(ivert);
-				ivert.setColor("white");
+				ivert.setColor(Color.WHITE);
 
 
 				InterfaceEdge edgeA = new InterfaceEdge(face.getId());
 				InterfaceEdge edgeB = new InterfaceEdge(face.getId());
-				edgeA.setColor("green");
-				edgeB.setColor("blue");
+				edgeA.setColor(Color.BLUE.darker());
+				edgeB.setColor(Color.BLUE);
 
 				//Set segments for wrapped edges
 				wrapEdge(edgeA, posA, mid, ucPosA, ucMid, cell);
@@ -226,11 +243,11 @@ public class LatticeGraph {
 	private int compareEdges(CrystalCell cell, ChainVertex a, ChainVertex b) {
 		Point3d endPosA = a.getPosition();
 		Point3d endPosB = b.getPosition();
-		
+
 		Point3i cellA = cell.getCellIndices(endPosA);
 		Point3i cellB = cell.getCellIndices(endPosB);
 
-		
+
 		int comp;
 		// Unit cell
 		comp = Double.compare(cellA.x, cellB.x);
@@ -239,7 +256,7 @@ public class LatticeGraph {
 		if(comp != 0) return comp;
 		comp = Double.compare(cellA.z, cellB.z);
 		if(comp != 0) return comp;
-		
+
 		// Asymmetric unit
 		comp = new Integer(a.getOpId()).compareTo(b.getOpId());
 		if(comp != 0) return comp;
@@ -247,7 +264,7 @@ public class LatticeGraph {
 		// Chain ID
 		comp = a.getChainId().compareTo(b.getChainId());
 		if(comp != 0) return comp;
-		
+
 		// actual coordinates (shouldn't be needed)
 		comp = Double.compare(endPosA.x, endPosB.x);
 		if(comp != 0) return comp;
@@ -427,8 +444,8 @@ public class LatticeGraph {
 				Point3d centroid = new Point3d(centroidAU);
 				spaceOps[opId].transform(centroid);
 
-//				if(!cell.getCellIndices(centroid).equals(new Point3i(0,0,0)))
-//					logger.info("moving chain "+chainId+" op "+opId);
+				//				if(!cell.getCellIndices(centroid).equals(new Point3i(0,0,0)))
+				//					logger.info("moving chain "+chainId+" op "+opId);
 				// Make sure it is inside the cell
 				cell.transfToOriginCell(centroid);
 
@@ -487,7 +504,7 @@ public class LatticeGraph {
 				if( perpPos != null) {
 					perpPosStr = String.format("{%f,%f,%f}",perpPos.x,perpPos.y,perpPos.z);
 				}
-				String color = vert.getColor();
+				String color = toJmolColor(vert.getColor());
 				String colorStr = "";
 				if( color != null ) {
 					colorStr = "COLOR "+color;
@@ -503,6 +520,10 @@ public class LatticeGraph {
 		}
 		logger.trace("JMOL:\n"+str.toString());
 		return str.toString();
+	}
+
+	private String toJmolColor(Color color) {
+		return String.format("[%f,%f,%f]", color.getRed()/256f,color.getGreen()/256f,color.getBlue()/256f);
 	}
 
 	public String drawEdges() {
@@ -533,7 +554,7 @@ public class LatticeGraph {
 						a,b,'a'+segNum,edge.hashCode(),
 						posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
 						posB.x-posA.x,posB.y-posA.y,posB.z-posA.z,
-						edge.getColor() == null ? "yellow" : edge.getColor() ));
+						edge.getColor() == null ? "yellow" : toJmolColor(edge.getColor()) ));
 				segNum++;
 			}
 
@@ -542,6 +563,9 @@ public class LatticeGraph {
 		return str.toString();
 	}
 
+	public Graph<AtomVertex, InterfaceEdge> getGraph() {
+		return graph;
+	}
 
 	public static void main(String[] args) {
 		String name;
@@ -549,36 +573,147 @@ public class LatticeGraph {
 		//name = "4MD1"; // rhodopsin, P63
 		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
 		name = "1a6d"; //octohedral
-//		name = "3hbx"; // D3
-//		name = "1pmm"; // P1 hexamer
-//		name = "1pmo"; // different space group
-//		name = "3piu"; // dimer
-//		name = "1faa"; //monomer
-		String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
+		//		name = "3hbx"; // D3
+		//		name = "1pmm"; // P1 hexamer
+		//		name = "1pmo"; // different space group
+		//		name = "3piu"; // dimer
+		//name = "1faa"; //monomer
+		//String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 
 		try {
-			Structure struc = StructureTools.getStructure(filename);
+			AtomCache cache = new AtomCache();
+			cache.setUseMmCif(true);
+			Structure struc = cache.getStructure(name);
+			File file = getFile(cache,name);
+			if(!file.exists() ) {
+				logger.error(String.format("Error loading %s from %s",name,file.getAbsolutePath()));
+				System.exit(1); return;
+			}
 
 			LatticeGraph graph = new LatticeGraph(struc);
 
-			BiojavaJmol jmol = new BiojavaJmol();
-			//jmol.setStructure(struc);
-			jmol.evalString(String.format("load \"%s\" {1 1 1};",filename));
-			jmol.evalString("set unitcell {0 0 0};");
-			//jmol.evalString("");
-			jmol.evalString(graph.drawVertices());
-			jmol.evalString(graph.drawEdges());
-			// cartoon
-			//jmol.evalString("hide null; select all;  spacefill off; wireframe off; backbone off; cartoon on;  select ligand; wireframe 0.16;spacefill 0.5; color cpk;  select *.FE; spacefill 0.7; color cpk ;  select *.CU; spacefill 0.7; color cpk ;  select *.ZN; spacefill 0.7; color cpk ;  select alls ON;");
-			jmol.evalString("select all; spacefill off; wireframe off; backbone off; cartoon off; select none;");
-			jmol.evalString("set axes molecular;");
 
-			jmol.getFrame().setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			// Visualize
+			graph.visualize3D(file.getAbsolutePath());
+			graph.visualize2D();
 
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (StructureException e) {
 			e.printStackTrace();
 		}
+	}
+
+	/**
+	 * Tries to guess the file location from an AtomCache
+	 * @param cache
+	 * @param name
+	 * @return
+	 */
+	private static File getFile(AtomCache cache, String name) {
+		if(cache.isUseMmCif()) {
+			MMCIFFileReader reader = new MMCIFFileReader(cache.getPath());
+			reader.setPdbDirectorySplit(cache.isSplit());
+			reader.setAutoFetch(cache.isAutoFetch());
+
+			File dir = reader.getDir(name);
+			String filename = reader.getMmCifFileName(name);
+			File file = new File(dir,filename);
+			return file;
+		} else {
+			PDBFileReader reader = new PDBFileReader(cache.getPath());
+			reader.setPdbDirectorySplit(cache.isSplit());
+			reader.setAutoFetch(cache.isAutoFetch());
+			reader.setFetchFileEvenIfObsolete(cache.isFetchFileEvenIfObsolete());
+			reader.setFetchCurrent(cache.isFetchCurrent());
+
+			reader.setFileParsingParameters(cache.getFileParsingParams());
+
+			File dir = reader.getDir(name, cache.isFetchFileEvenIfObsolete());
+			File file = new File(dir,"pdb"+name.toLowerCase()+".ent.gz"); 
+			
+			return file;
+		}
+	}
+
+	public void visualize3D(String filename) {
+		BiojavaJmol jmol = new BiojavaJmol();
+		//jmol.setStructure(struc);
+		jmol.evalString(String.format("load \"%s\" {1 1 1};",filename));
+		jmol.evalString("set unitcell {0 0 0};");
+		//jmol.evalString("");
+		jmol.evalString(drawVertices());
+		jmol.evalString(drawEdges());
+		// cartoon
+		//jmol.evalString("hide null; select all;  spacefill off; wireframe off; backbone off; cartoon on;  select ligand; wireframe 0.16;spacefill 0.5; color cpk;  select *.FE; spacefill 0.7; color cpk ;  select *.CU; spacefill 0.7; color cpk ;  select *.ZN; spacefill 0.7; color cpk ;  select alls ON;");
+		jmol.evalString("select all; spacefill off; wireframe off; backbone off; cartoon off; select none;");
+		jmol.evalString("set axes molecular;");
+
+		jmol.getFrame().setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+	}
+
+	/**
+	 * @param graph
+	 */
+	public void visualize2D() {
+		int width = 500;
+		int height = 500;
+		// Layout
+		//Layout<AtomVertex,InterfaceEdge> layout = new CircleLayout<AtomVertex,InterfaceEdge>(graph.getGraph());
+//		FRLayout2<AtomVertex, InterfaceEdge> layout = new FRLayout2<AtomVertex, InterfaceEdge>(graph);
+//		layout.setAttractionMultiplier(.75);
+//		layout.setRepulsionMultiplier(.75);
+//		layout.setMaxIterations(10000);
+		SpringLayout<AtomVertex, InterfaceEdge> layout = new SpringLayout2<AtomVertex, InterfaceEdge>(graph);
+		layout.setSize(new Dimension(width,height)); // sets the initial size of the space
+
+		// Visualization parameters
+		
+		VisualizationViewer<AtomVertex, InterfaceEdge> vv =
+				new VisualizationViewer<AtomVertex, InterfaceEdge>(layout);
+
+		vv.getRenderContext().setVertexLabelTransformer(new ToStringLabeller<AtomVertex>());
+		vv.getRenderContext().setEdgeLabelTransformer(new ToStringLabeller<InterfaceEdge>());
+
+		Transformer<AtomVertex, Shape> vertexShapeTransformer = new Transformer<AtomVertex, Shape>() {
+			@Override
+			public Shape transform(AtomVertex v) {
+				double size = 25;//px
+				if(v.getClass() == ChainVertex.class) {
+					return new Rectangle2D.Double(-size/2,-size/2,size,size);
+				} else if(v.getClass() == InterfaceVertex.class) {
+					return new Ellipse2D.Double(-size/2,-size/2,size,size);
+				} else {
+					return new Ellipse2D.Double(-size/2,-size/2,size,size);
+				}
+			}
+		};
+		vv.getRenderContext().setVertexShapeTransformer(vertexShapeTransformer);
+		
+		Transformer<AtomVertex, Paint> vertexTransformer = new Transformer<AtomVertex, Paint>() {
+			@Override
+			public Paint transform(AtomVertex v) {
+				Color col = v.getColor();
+				if( col == null )
+					col = Color.RED;
+				return col;
+			}
+		};
+		vv.getRenderContext().setVertexFillPaintTransformer(vertexTransformer);
+		
+		// Interaction
+		// Create a graph mouse and add it to the visualization component
+		DefaultModalGraphMouse<AtomVertex, InterfaceEdge> gm = new DefaultModalGraphMouse<AtomVertex, InterfaceEdge>();
+		gm.setMode(ModalGraphMouse.Mode.TRANSFORMING);
+		vv.setGraphMouse(gm);
+		vv.addKeyListener(gm.getModeKeyListener());
+		
+		// Set up window & display
+		vv.setPreferredSize(new Dimension(width,height)); //Sets the viewing area size
+		JFrame frame = new JFrame("Simple Graph View");
+		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.getContentPane().add(vv);
+		frame.pack();
+		frame.setVisible(true);
 	}
 }
