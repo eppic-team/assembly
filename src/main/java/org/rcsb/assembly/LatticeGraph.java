@@ -120,7 +120,6 @@ public class LatticeGraph {
 		// For each interface, add edges for each asymm unit
 		for(StructureInterface face : interfaces) {
 			//if(face.getId() != 4) continue;
-			System.out.println(face);
 
 			Pair<CrystalTransform> transforms = face.getTransforms();
 			CrystalTransform transformA = transforms.getFirst();
@@ -170,26 +169,12 @@ public class LatticeGraph {
 				ChainVertex vertA = findVertex(ucPosA);
 				ChainVertex vertB = findVertex(ucPosB);
 
-				//TODO remove duplicates
-				// Only draw edges where cell(A) <= cell(B)
-				Point3i cellA = cell.getCellIndices(endPosA);
-				Point3i cellB = cell.getCellIndices(endPosB);
-				if( cellA.x > cellB.x ||
-						cellA.y > cellB.y ||
-						cellA.z > cellB.z )
-				{
-					//continue;
+				// Only draw edges where A < B
+				int edgeDir = compareEdges(cell,vertA,vertB);
+				if(edgeDir >= 0) {
+					logger.info("Skipping");
+					continue;
 				}
-				// If equal, draw edges where au(A) < au(B)
-				else if( cellA.equals(cellB) && transformA.getTransformId() > transformB.getTransformId()) {
-					//continue;
-				}
-				// Use chainId as final tie breaker
-				else if(transformA.getTransformId() ==transformB.getTransformId() &&
-						chainA.compareTo(chainB) > 0) {
-					//continue;
-				}
-
 
 				// Create interface vertex at the midpoint
 				InterfaceVertex ivert = new InterfaceVertex(opId,face.getId());
@@ -197,9 +182,19 @@ public class LatticeGraph {
 				mid.add(posA, posB);
 				mid.scale(0.5);
 				Point3d ucMid = new Point3d(mid);
-				cell.transfToOriginCell(ucMid);
 				ivert.setPosition(ucMid);
+
+				// Orient towards posA
+				Point3d perpPointUC = new Point3d(posA);
+				ivert.setPerpendicularPoint(perpPointUC);
+
+				// transform both points together to UC
+				cell.transfToOriginCell(new Point3d[] {ucMid,perpPointUC},ucMid);
+
+				// Set properties
 				graph.addVertex(ivert);
+				ivert.setColor("white");
+
 
 				InterfaceEdge edgeA = new InterfaceEdge(face.getId());
 				InterfaceEdge edgeB = new InterfaceEdge(face.getId());
@@ -215,6 +210,53 @@ public class LatticeGraph {
 				graph.addEdge(edgeB, vertB, ivert);
 			}
 		}
+	}
+
+	/**
+	 * Partially order edges
+	 * @param cell
+	 * @param endPosA
+	 * @param endPosB
+	 * @param transformA
+	 * @param transformB
+	 * @param chainA
+	 * @param chainB
+	 * @return 0 if equal, -1 if a < b, or +1 if a > b
+	 */
+	private int compareEdges(CrystalCell cell, ChainVertex a, ChainVertex b) {
+		Point3d endPosA = a.getPosition();
+		Point3d endPosB = b.getPosition();
+		
+		Point3i cellA = cell.getCellIndices(endPosA);
+		Point3i cellB = cell.getCellIndices(endPosB);
+
+		
+		int comp;
+		// Unit cell
+		comp = Double.compare(cellA.x, cellB.x);
+		if(comp != 0) return comp;
+		comp = Double.compare(cellA.y, cellB.y);
+		if(comp != 0) return comp;
+		comp = Double.compare(cellA.z, cellB.z);
+		if(comp != 0) return comp;
+		
+		// Asymmetric unit
+		comp = new Integer(a.getOpId()).compareTo(b.getOpId());
+		if(comp != 0) return comp;
+
+		// Chain ID
+		comp = a.getChainId().compareTo(b.getChainId());
+		if(comp != 0) return comp;
+		
+		// actual coordinates (shouldn't be needed)
+		comp = Double.compare(endPosA.x, endPosB.x);
+		if(comp != 0) return comp;
+		comp = Double.compare(endPosA.y, endPosB.y);
+		if(comp != 0) return comp;
+		comp = Double.compare(endPosA.z, endPosB.z);
+		if(comp != 0) return comp;
+
+		return 0;
 	}
 
 	private Point3d round(Point3d p, int places) {
@@ -318,6 +360,9 @@ public class LatticeGraph {
 		}
 		Iterator<Point3d> it = points.iterator();
 		Point3d nearest = it.next();
+		if(!it.hasNext()) {
+			return nearest; // length 1 list
+		}
 		double minDist = query.distanceSquared(nearest);
 		while( it.hasNext() ) {
 			Point3d pt = it.next();
@@ -437,9 +482,19 @@ public class LatticeGraph {
 				InterfaceVertex vert = (InterfaceVertex) vertex;
 
 				Point3d pos = vert.getPosition();
+				Point3d perpPos = vert.getPerpendicularPoint();
+				String perpPosStr = "";
+				if( perpPos != null) {
+					perpPosStr = String.format("{%f,%f,%f}",perpPos.x,perpPos.y,perpPos.z);
+				}
+				String color = vert.getColor();
+				String colorStr = "";
+				if( color != null ) {
+					colorStr = "COLOR "+color;
+				}
 
-				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} DIAMETER 5.0;\n",vert,
-						pos.x,pos.y,pos.z ));
+				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} %s DIAMETER 5.0 %s;\n",vert,
+						pos.x,pos.y,pos.z, perpPosStr, colorStr ));
 				str.append(String.format("set echo ID echoInterface%s {%f,%f,%f}; color echo green;  echo %s;\n",
 						vert, pos.x,pos.y,pos.z,vert.getInterfaceId()));
 			} else {
@@ -469,13 +524,13 @@ public class LatticeGraph {
 				Point3d posA = segment.getFirst();
 				Point3d posB = segment.getSecond();
 
-				final double jitter = 1.0;//amount of jitter to add to edge positions
+				final double jitter = 0.0;//amount of jitter to add to edge positions
 				double xjitter = (Math.random()*2-1.0) * jitter;
 				double yjitter = (Math.random()*2-1.0) * jitter;
 				double zjitter = (Math.random()*2-1.0) * jitter;
 
-				str.append(String.format("draw ID edge_%s_%s%s VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
-						a,b,'a'+segNum,
+				str.append(String.format("draw ID edge_%s_%s_%s_%d VECTOR {%f,%f,%f} {%f,%f,%f} COLOR %s;\n",
+						a,b,'a'+segNum,edge.hashCode(),
 						posA.x+xjitter,posA.y+yjitter,posA.z+zjitter,
 						posB.x-posA.x,posB.y-posA.y,posB.z-posA.z,
 						edge.getColor() == null ? "yellow" : edge.getColor() ));
@@ -493,12 +548,12 @@ public class LatticeGraph {
 		name = "1a99"; // See eppic-science #14
 		//name = "4MD1"; // rhodopsin, P63
 		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
-		//name = "1a6d"; //octohedral
-		name = "3hbx"; // D3
-		name = "1pmm"; // P1 hexamer
-		name = "1pmo"; // different space group
-		name = "3piu"; // dimer
-		name = "1faa"; //monomer
+		name = "1a6d"; //octohedral
+//		name = "3hbx"; // D3
+//		name = "1pmm"; // P1 hexamer
+//		name = "1pmo"; // different space group
+//		name = "3piu"; // dimer
+//		name = "1faa"; //monomer
 		String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 
 		try {

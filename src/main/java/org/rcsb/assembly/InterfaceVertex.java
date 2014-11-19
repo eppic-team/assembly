@@ -1,12 +1,17 @@
 package org.rcsb.assembly;
 
+import javax.vecmath.Point3d;
+
 public class InterfaceVertex extends AtomVertex {
 	private int opId; //assymetric unit
 	private int interfaceId; // interface
+	private Point3d perpendicularPoint;
+	
 	public InterfaceVertex(int opId, int interfaceId) {
 		super();
 		this.opId = opId;
 		this.interfaceId = interfaceId;
+		this.setPerpendicularPoint(null);
 	}
 
 	@Override
@@ -45,5 +50,13 @@ public class InterfaceVertex extends AtomVertex {
 		if (opId != other.opId)
 			return false;
 		return true;
+	}
+
+	public Point3d getPerpendicularPoint() {
+		return perpendicularPoint;
+	}
+
+	public void setPerpendicularPoint(Point3d perpendicularPoint) {
+		this.perpendicularPoint = perpendicularPoint;
 	}
 }

@@ -12,13 +12,22 @@ import javax.vecmath.Point3d;
  */
 public abstract class AtomVertex {
 	protected Point3d position;
+	protected String color;//optional
+
 	public AtomVertex() {
 		this.position = null;
+		this.color = null;
 	}
 	public Point3d getPosition() {
 		return position;
 	}
 	public void setPosition(Point3d pos) {
 		this.position = pos;
+	}
+	public String getColor() {
+		return color;
+	}
+	public void setColor(String color) {
+		this.color = color;
 	}
 }
