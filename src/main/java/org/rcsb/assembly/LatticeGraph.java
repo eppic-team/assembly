@@ -44,8 +44,10 @@ import org.slf4j.LoggerFactory;
 
 import edu.uci.ics.jung.algorithms.layout.SpringLayout;
 import edu.uci.ics.jung.algorithms.layout.SpringLayout2;
+import edu.uci.ics.jung.graph.DirectedOrderedSparseMultigraph;
 import edu.uci.ics.jung.graph.Graph;
 import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
+import edu.uci.ics.jung.graph.util.EdgeType;
 import edu.uci.ics.jung.visualization.VisualizationViewer;
 import edu.uci.ics.jung.visualization.control.DefaultModalGraphMouse;
 import edu.uci.ics.jung.visualization.control.ModalGraphMouse;
@@ -99,12 +101,12 @@ public class LatticeGraph {
 
 
 	public LatticeGraph(Structure struc) {
-		graph = new UndirectedSparseMultigraph<AtomVertex, InterfaceEdge>();
+		graph = new DirectedOrderedSparseMultigraph<AtomVertex, InterfaceEdge>();
 		chainNodes = new HashMap<ChainVertexKey,ChainVertex>();
 
 		PDBCrystallographicInfo crystalInfo = struc.getCrystallographicInfo();
 		if(crystalInfo == null) {
-			logger.error("No crystalographic info set for this structure.");
+			logger.error("No crystallographic info set for this structure.");
 		}
 		// Begin SciFi comments
 		// SPACE OPS! Transform!
@@ -178,20 +180,13 @@ public class LatticeGraph {
 				Point3d ucPosB = new Point3d(posB);
 				cell.transfToOriginCell(ucPosA);
 				cell.transfToOriginCell(ucPosB);
-				logger.info(String.format("Interface %d AU %d: %s;\t%s\t->\t%s;\t%s%n",face.getId(),opId,
+				logger.info(String.format("Interface %d AU %d: %s;\t%s\t->\t%s;\t%s",face.getId(),opId,
 						round(posA,2),round(posB,2),round(ucPosA,2),round(ucPosB,2) ));
 
 
 				// Determine which AU the partners belong to
 				ChainVertex vertA = findVertex(ucPosA);
 				ChainVertex vertB = findVertex(ucPosB);
-
-				// Only draw edges where A < B
-				int edgeDir = compareEdges(cell,vertA,vertB);
-				if(edgeDir >= 0) {
-					logger.info("Skipping");
-					continue;
-				}
 
 				// Create interface vertex at the midpoint
 				InterfaceVertex ivert = new InterfaceVertex(opId,face.getId());
@@ -223,57 +218,10 @@ public class LatticeGraph {
 				wrapEdge(edgeB, mid, posB, ucMid, ucPosB, cell);
 
 
-				graph.addEdge(edgeA, vertA, ivert);
-				graph.addEdge(edgeB, vertB, ivert);
+				graph.addEdge(edgeA, vertA, ivert, EdgeType.DIRECTED);
+				graph.addEdge(edgeB, vertB, ivert, EdgeType.DIRECTED);
 			}
 		}
-	}
-
-	/**
-	 * Partially order edges
-	 * @param cell
-	 * @param endPosA
-	 * @param endPosB
-	 * @param transformA
-	 * @param transformB
-	 * @param chainA
-	 * @param chainB
-	 * @return 0 if equal, -1 if a < b, or +1 if a > b
-	 */
-	private int compareEdges(CrystalCell cell, ChainVertex a, ChainVertex b) {
-		Point3d endPosA = a.getPosition();
-		Point3d endPosB = b.getPosition();
-
-		Point3i cellA = cell.getCellIndices(endPosA);
-		Point3i cellB = cell.getCellIndices(endPosB);
-
-
-		int comp;
-		// Unit cell
-		comp = Double.compare(cellA.x, cellB.x);
-		if(comp != 0) return comp;
-		comp = Double.compare(cellA.y, cellB.y);
-		if(comp != 0) return comp;
-		comp = Double.compare(cellA.z, cellB.z);
-		if(comp != 0) return comp;
-
-		// Asymmetric unit
-		comp = new Integer(a.getOpId()).compareTo(b.getOpId());
-		if(comp != 0) return comp;
-
-		// Chain ID
-		comp = a.getChainId().compareTo(b.getChainId());
-		if(comp != 0) return comp;
-
-		// actual coordinates (shouldn't be needed)
-		comp = Double.compare(endPosA.x, endPosB.x);
-		if(comp != 0) return comp;
-		comp = Double.compare(endPosA.y, endPosB.y);
-		if(comp != 0) return comp;
-		comp = Double.compare(endPosA.z, endPosB.z);
-		if(comp != 0) return comp;
-
-		return 0;
 	}
 
 	private Point3d round(Point3d p, int places) {
@@ -572,14 +520,14 @@ public class LatticeGraph {
 		name = "1a99"; // See eppic-science #14
 		//name = "4MD1"; // rhodopsin, P63
 		name = "1C8R"; // rhodopsin, P63, two trimer interfaces
-		name = "1a6d"; //octohedral
+		//name = "1a6d"; //octohedral
 		//		name = "3hbx"; // D3
 		//		name = "1pmm"; // P1 hexamer
 		//		name = "1pmo"; // different space group
 		//		name = "3piu"; // dimer
 		//name = "1faa"; //monomer
 		//String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
-
+		//name = "1fbk"; // 2D crystal with a 32A contact
 		try {
 			AtomCache cache = new AtomCache();
 			cache.setUseMmCif(true);
@@ -594,8 +542,8 @@ public class LatticeGraph {
 
 
 			// Visualize
-			graph.visualize3D(file.getAbsolutePath());
 			graph.visualize2D();
+			graph.visualize3D(file.getAbsolutePath());
 
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -636,8 +584,9 @@ public class LatticeGraph {
 		}
 	}
 
-	public void visualize3D(String filename) {
+	public BiojavaJmol visualize3D(String filename) {
 		BiojavaJmol jmol = new BiojavaJmol();
+		jmol.setTitle(filename);
 		//jmol.setStructure(struc);
 		jmol.evalString(String.format("load \"%s\" {1 1 1};",filename));
 		jmol.evalString("set unitcell {0 0 0};");
@@ -646,10 +595,12 @@ public class LatticeGraph {
 		jmol.evalString(drawEdges());
 		// cartoon
 		//jmol.evalString("hide null; select all;  spacefill off; wireframe off; backbone off; cartoon on;  select ligand; wireframe 0.16;spacefill 0.5; color cpk;  select *.FE; spacefill 0.7; color cpk ;  select *.CU; spacefill 0.7; color cpk ;  select *.ZN; spacefill 0.7; color cpk ;  select alls ON;");
-		jmol.evalString("select all; spacefill off; wireframe off; backbone off; cartoon off; select none;");
+		jmol.evalString("select all; spacefill off; wireframe off; backbone off; cartoon off; restrict not water; select none;");
 		jmol.evalString("set axes molecular;");
 
 		jmol.getFrame().setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		
+		return jmol;
 	}
 
 	/**
@@ -711,7 +662,7 @@ public class LatticeGraph {
 		// Set up window & display
 		vv.setPreferredSize(new Dimension(width,height)); //Sets the viewing area size
 		JFrame frame = new JFrame("Simple Graph View");
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.getContentPane().add(vv);
 		frame.pack();
 		frame.setVisible(true);
