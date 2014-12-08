@@ -39,6 +39,7 @@ import org.biojava.bio.structure.io.PDBFileReader;
 import org.biojava.bio.structure.xtal.CrystalBuilder;
 import org.biojava.bio.structure.xtal.CrystalCell;
 import org.biojava.bio.structure.xtal.CrystalTransform;
+import org.biojava3.structure.StructureIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -515,6 +516,7 @@ public class LatticeGraph {
 		return graph;
 	}
 
+	@SuppressWarnings("unused")
 	public static void main(String[] args) {
 		String name;
 		name = "1a99"; // See eppic-science #14
@@ -526,16 +528,24 @@ public class LatticeGraph {
 		//		name = "1pmo"; // different space group
 		//		name = "3piu"; // dimer
 		//name = "1faa"; //monomer
-		//String filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
+		String filename = null;
+		//name = "2Z51";
+		//filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 		//name = "1fbk"; // 2D crystal with a 32A contact
 		try {
-			AtomCache cache = new AtomCache();
-			cache.setUseMmCif(true);
-			Structure struc = cache.getStructure(name);
-			File file = getFile(cache,name);
-			if(!file.exists() ) {
-				logger.error(String.format("Error loading %s from %s",name,file.getAbsolutePath()));
-				System.exit(1); return;
+			Structure struc;
+			if( filename == null ) {
+				AtomCache cache = new AtomCache();
+				cache.setUseMmCif(true);
+				struc = cache.getStructure(name);
+				File file = getFile(cache,name);
+				if(!file.exists() ) {
+					logger.error(String.format("Error loading %s from %s",name,file.getAbsolutePath()));
+					System.exit(1); return;
+				}
+				filename = file.getAbsolutePath();
+			} else {
+				struc = StructureTools.getStructure(filename);
 			}
 
 			LatticeGraph graph = new LatticeGraph(struc);
@@ -543,7 +553,7 @@ public class LatticeGraph {
 
 			// Visualize
 			graph.visualize2D();
-			graph.visualize3D(file.getAbsolutePath());
+			graph.visualize3D(filename);
 
 		} catch (IOException e) {
 			e.printStackTrace();
