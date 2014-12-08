@@ -99,7 +99,8 @@ public class LatticeGraph {
 	private Graph<AtomVertex,InterfaceEdge> graph;
 	// Maps chainId and unit cell operator id to a vertex
 	private Map<ChainVertexKey, ChainVertex> chainNodes;
-
+	
+	private boolean extendedEdges = true;
 
 	public LatticeGraph(Structure struc) {
 		graph = new DirectedOrderedSparseMultigraph<AtomVertex, InterfaceEdge>();
@@ -215,9 +216,13 @@ public class LatticeGraph {
 				edgeB.setColor(Color.BLUE);
 
 				//Set segments for wrapped edges
-				wrapEdge(edgeA, posA, mid, ucPosA, ucMid, cell);
-				wrapEdge(edgeB, mid, posB, ucMid, ucPosB, cell);
-
+				if(extendedEdges) {
+					extendEdge(edgeA, posA, mid, ucPosA, ucMid, cell);
+					extendEdge(edgeB, mid, posB, ucMid, ucPosB, cell);
+				} else {
+					wrapEdge(edgeA, posA, mid, ucPosA, ucMid, cell);
+					wrapEdge(edgeB, mid, posB, ucMid, ucPosB, cell);
+				}
 
 				graph.addEdge(edgeA, vertA, ivert, EdgeType.DIRECTED);
 				graph.addEdge(edgeB, vertB, ivert, EdgeType.DIRECTED);
@@ -318,6 +323,42 @@ public class LatticeGraph {
 
 		edge.addSegment(ucPosA, intersectionA);
 		edge.addSegment(intersectionB, ucPosB);
+	}
+
+	/**
+	 *
+	 * @param edge The edge to add segments to
+	 * @param posA start position, unwrapped
+	 * @param posB end position, unwrapped
+	 * @param ucPosA start position, wrapped to unit cell
+	 * @param ucPosB end position, wrapped to unit cell
+	 * @param cell Unit cell parameters
+	 */
+	private void extendEdge(InterfaceEdge edge, Point3d posA, Point3d posB,
+			Point3d ucPosA, Point3d ucPosB, CrystalCell cell) {
+		Point3i cellA = cell.getCellIndices(posA);
+		Point3i cellB = cell.getCellIndices(posB);
+
+		// no wrapping within cell
+		if( cellA.equals(cellB)) {
+			edge.addSegment(ucPosA, ucPosB);
+			return;
+		}
+
+		// create segment with A in UC
+		Point3d p1 = new Point3d(posA);
+		Point3d p2 = new Point3d(posB);
+		// convert to unit cell
+		// intersections are on the edge of the origin cell, so need to reference posA
+		cell.transfToOriginCell(new Point3d[] {p1,p2}, posA);
+		edge.addSegment(p1,p2);
+
+		// create segment with B in UC
+		p1 = new Point3d(posA);
+		p2 = new Point3d(posB);
+		// convert to unit cell
+		cell.transfToOriginCell(new Point3d[] {p1,p2}, posB);
+		edge.addSegment(p1,p2);
 	}
 
 	private Point3d nearestNeighbor(List<Point3d> points, Point3d query) {
