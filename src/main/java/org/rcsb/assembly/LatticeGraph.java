@@ -36,10 +36,10 @@ import org.biojava.bio.structure.contact.StructureInterfaceList;
 import org.biojava.bio.structure.gui.BiojavaJmol;
 import org.biojava.bio.structure.io.MMCIFFileReader;
 import org.biojava.bio.structure.io.PDBFileReader;
+import org.biojava.bio.structure.io.LocalPDBDirectory.FetchBehavior;
 import org.biojava.bio.structure.xtal.CrystalBuilder;
 import org.biojava.bio.structure.xtal.CrystalCell;
 import org.biojava.bio.structure.xtal.CrystalTransform;
-import org.biojava3.structure.StructureIO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,7 +47,6 @@ import edu.uci.ics.jung.algorithms.layout.SpringLayout;
 import edu.uci.ics.jung.algorithms.layout.SpringLayout2;
 import edu.uci.ics.jung.graph.DirectedOrderedSparseMultigraph;
 import edu.uci.ics.jung.graph.Graph;
-import edu.uci.ics.jung.graph.UndirectedSparseMultigraph;
 import edu.uci.ics.jung.graph.util.EdgeType;
 import edu.uci.ics.jung.visualization.VisualizationViewer;
 import edu.uci.ics.jung.visualization.control.DefaultModalGraphMouse;
@@ -612,24 +611,17 @@ public class LatticeGraph {
 	private static File getFile(AtomCache cache, String name) {
 		if(cache.isUseMmCif()) {
 			MMCIFFileReader reader = new MMCIFFileReader(cache.getPath());
-			reader.setPdbDirectorySplit(cache.isSplit());
-			reader.setAutoFetch(cache.isAutoFetch());
+			reader.setFetchBehavior(FetchBehavior.DEFAULT);
 
-			File dir = reader.getDir(name);
-			String filename = reader.getMmCifFileName(name);
-			File file = new File(dir,filename);
+			File file = reader.getLocalFile(name);
 			return file;
 		} else {
 			PDBFileReader reader = new PDBFileReader(cache.getPath());
-			reader.setPdbDirectorySplit(cache.isSplit());
-			reader.setAutoFetch(cache.isAutoFetch());
-			reader.setFetchFileEvenIfObsolete(cache.isFetchFileEvenIfObsolete());
-			reader.setFetchCurrent(cache.isFetchCurrent());
+			reader.setFetchBehavior(FetchBehavior.DEFAULT);
 
 			reader.setFileParsingParameters(cache.getFileParsingParams());
 
-			File dir = reader.getDir(name, cache.isFetchFileEvenIfObsolete());
-			File file = new File(dir,"pdb"+name.toLowerCase()+".ent.gz"); 
+			File file = reader.getLocalFile(name); 
 			
 			return file;
 		}
