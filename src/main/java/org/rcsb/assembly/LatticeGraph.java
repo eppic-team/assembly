@@ -611,13 +611,15 @@ public class LatticeGraph {
 	private static File getFile(AtomCache cache, String name) {
 		if(cache.isUseMmCif()) {
 			MMCIFFileReader reader = new MMCIFFileReader(cache.getPath());
-			reader.setFetchBehavior(FetchBehavior.DEFAULT);
+			reader.setFetchBehavior(cache.getFetchBehavior());
+			reader.setObsoleteBehavior(cache.getObsoleteBehavior());
 
 			File file = reader.getLocalFile(name);
 			return file;
 		} else {
 			PDBFileReader reader = new PDBFileReader(cache.getPath());
-			reader.setFetchBehavior(FetchBehavior.DEFAULT);
+			reader.setFetchBehavior(cache.getFetchBehavior());
+			reader.setObsoleteBehavior(cache.getObsoleteBehavior());
 
 			reader.setFileParsingParameters(cache.getFileParsingParams());
 
