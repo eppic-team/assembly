@@ -120,11 +120,6 @@ public class LatticeGraph {
 
 
 
-		// Generate vertices for unit cell
-		initChainVertices(struc, spaceOps, cell);
-		logger.info("Found "+graph.getVertexCount()+" chains in unit cell");
-
-
 		// get all interfaces
 		CrystalBuilder builder = new CrystalBuilder(struc);
 		StructureInterfaceList interfaces = builder.getUniqueInterfaces();
@@ -135,6 +130,15 @@ public class LatticeGraph {
 		interfaces.removeInterfacesBelowArea();
 		logger.info("Found "+interfaces.size()+" interfaces");
 
+		// Debugging vertices
+//		boolean normalVerts = debugVertices(struc, spaceOps, cell, interfaces);
+//		if(!normalVerts) return;
+
+
+		// Generate vertices for unit cell
+		initChainVertices(struc, spaceOps, cell);
+		logger.info("Found "+graph.getVertexCount()+" chains in unit cell");
+		
 
 		// For each interface, add edges for each asymm unit
 		for(StructureInterface face : interfaces) {
@@ -226,6 +230,84 @@ public class LatticeGraph {
 				graph.addEdge(edgeB, vertB, ivert, EdgeType.DIRECTED);
 			}
 		}
+	}
+
+	private boolean debugVertices(Structure struc,  Matrix4d[] spaceOps, CrystalCell cell, StructureInterfaceList interfaces) {
+		AtomVertex origin = new ChainVertex("Origin", 0);
+		origin.setColor(Color.RED);
+		Point3d pos = new Point3d();
+		cell.transfToOrthonormal(pos);
+		origin.setPosition(pos);
+		graph.addVertex(origin);
+		
+		AtomVertex ones = new ChainVertex("111",0);
+		ones.setColor(Color.RED);
+		pos = new Point3d(1,1,1);
+		cell.transfToOrthonormal(pos);
+		ones.setPosition(pos);
+		graph.addVertex(ones);
+		
+		// Original AU coordinate
+		Atom[] ca = StructureTools.getAtomCAArray(struc.getChain(0));
+		Point3d centroidAU = new Point3d(Calc.getCentroid(ca).getCoords());
+		AtomVertex au = new ChainVertex("AU",0);
+		au.setColor(Color.GREEN);
+		au.setPosition(centroidAU);
+		graph.addVertex(au);
+		
+		// Crystal coordinate of the centroid
+		Point3d crystalCentroidAU = new Point3d(centroidAU);
+		cell.transfToCrystal(crystalCentroidAU);
+		System.out.println("x (xtal): "+crystalCentroidAU);
+		
+		// Interface 1
+		int i = 1;
+		StructureInterface face = interfaces.get(i);
+		Pair<CrystalTransform> transforms = face.getTransforms();
+		CrystalTransform transformA = transforms.getFirst();
+		CrystalTransform transformB = transforms.getSecond();
+		//atrix4d crystalTransformA = transformA.getMatTransform();
+		Matrix4d Ci = transformB.getMatTransform();
+
+		System.out.println("Interface "+i);
+		System.out.println("A: "+transformA.toXYZString());
+		System.out.format("B=C%d: %s%n",i,transformB.toXYZString());
+		System.out.println(Ci.toString());
+		
+		// Apply Ci in crystal coords
+		pos = new Point3d(crystalCentroidAU);
+		Ci.transform(pos);
+		System.out.println("Ci*x (xtal):"+pos);
+		
+		cell.transfToOrthonormal(pos);
+		AtomVertex partner = new ChainVertex("C",1);
+		partner.setColor(Color.YELLOW);
+		partner.setPosition(pos);
+		graph.addVertex(partner);
+		
+		Matrix4d[] newSpaceOps = cell.transfToOriginCell(spaceOps, centroidAU);
+		
+		// Apply Tk to crystal coords
+		for(int j = 0; j< newSpaceOps.length;j++) {
+			Matrix4d Tk = new Matrix4d(newSpaceOps[j]);
+			Tk = cell.transfToCrystal(Tk);
+			System.out.format("T%d:%n%s%n",j,Tk);
+			pos = new Point3d(crystalCentroidAU);
+			Tk.transform(pos);
+			System.out.format("T%d*x: %s%n",j,pos);
+			
+			cell.transfToOrthonormal(pos);
+			AtomVertex partnerUC = new ChainVertex("T",j);
+			if(j == 7) {
+				partnerUC.setColor(Color.CYAN);
+			} else {
+				partnerUC.setColor(Color.GREEN.brighter());
+			}
+			partnerUC.setPosition(pos);
+			graph.addVertex(partnerUC);
+		}
+		
+		return true; // Show normal edges?
 	}
 
 	private Point3d round(Point3d p, int places) {
@@ -575,6 +657,10 @@ public class LatticeGraph {
 		//name = "2Z51";
 		//filename = System.getProperty("user.home")+"/pdb/"+name.toLowerCase()+".pdb";
 		//name = "1fbk"; // 2D crystal with a 32A contact
+		name = "1a99";// weird dimer+monomer
+		name = "4mml"; // C6
+		name = "1r1z"; // ~C4, wrong AU
+		name = "1xyy"; // AU far from UC
 		try {
 			Structure struc;
 			if( filename == null ) {

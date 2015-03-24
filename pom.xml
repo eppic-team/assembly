@@ -17,6 +17,7 @@
 		<maxmem>512M</maxmem>
 		<slf4j.version>1.7.7</slf4j.version>
 		<log4j.version>2.1</log4j.version>
+		<biojava.version>4.1.0-SNAPSHOT</biojava.version>
 	</properties>
 
 	<dependencies>
@@ -29,12 +30,12 @@
 		<dependency>
 			<groupId>org.biojava</groupId>
 			<artifactId>biojava-structure</artifactId>
-			<version>4.0.0</version>
+			<version>${biojava.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.biojava</groupId>
 			<artifactId>biojava-structure-gui</artifactId>
-			<version>4.0.0</version>
+			<version>${biojava.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>net.sf.jung</groupId>
