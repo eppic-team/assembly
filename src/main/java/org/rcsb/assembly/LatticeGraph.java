@@ -479,10 +479,14 @@ public class LatticeGraph {
 			if( vertex instanceof ChainVertex) {
 				ChainVertex vert = (ChainVertex) vertex;
 				Point3d pos = vert.getPosition();
-				str.append(String.format("isosurface ID chain%s CENTER {%f,%f,%f} SPHERE 5.0 COLOR blue;\n",
-						vert, pos.x,pos.y,pos.z ));
-				str.append(String.format("set echo ID echoChain%s {%f,%f,%f}; color echo blue; echo \"  %s\";\n",
-						vert, pos.x,pos.y,pos.z,vert));
+				String color = toJmolColor(vert.getColor());
+				if( color == null ) {
+					color = "blue";
+				}
+				str.append(String.format("isosurface ID chain%s COLOR %s CENTER {%f,%f,%f} SPHERE 5.0;\n",
+						vert, color, pos.x,pos.y,pos.z ));
+				str.append(String.format("set echo ID echoChain%s {%f,%f,%f}; color echo %s; echo \"  %s\";\n",
+						vert, pos.x,pos.y,pos.z,color,vert));
 			} else if( vertex instanceof InterfaceVertex ) {
 				InterfaceVertex vert = (InterfaceVertex) vertex;
 
@@ -493,15 +497,14 @@ public class LatticeGraph {
 					perpPosStr = String.format("{%f,%f,%f}",perpPos.x,perpPos.y,perpPos.z);
 				}
 				String color = toJmolColor(vert.getColor());
-				String colorStr = "";
-				if( color != null ) {
-					colorStr = "COLOR "+color;
+				if( color == null ) {
+					color = "white";
 				}
 
-				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} %s DIAMETER 5.0 %s;\n",vert,
-						pos.x,pos.y,pos.z, perpPosStr, colorStr ));
-				str.append(String.format("set echo ID echoInterface%s {%f,%f,%f}; color echo green;  echo %s;\n",
-						vert, pos.x,pos.y,pos.z,vert.getInterfaceId()));
+				str.append(String.format("draw ID interface%s CIRCLE {%f,%f,%f} %s DIAMETER 5.0 COLOR %s;\n",vert,
+						pos.x,pos.y,pos.z, perpPosStr, color ));
+				str.append(String.format("set echo ID echoInterface%s {%f,%f,%f}; color echo %s;  echo %s;\n",
+						vert, pos.x,pos.y,pos.z,color,vert.getInterfaceId()));
 			} else {
 				throw new IllegalStateException("Unrecognized vertex class "+vertex.getClass().toString());
 			}
@@ -511,6 +514,7 @@ public class LatticeGraph {
 	}
 
 	private String toJmolColor(Color color) {
+		if(color == null) return null;
 		return String.format("[%f,%f,%f]", color.getRed()/256f,color.getGreen()/256f,color.getBlue()/256f);
 	}
 
